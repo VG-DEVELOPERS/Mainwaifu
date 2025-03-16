@@ -21,8 +21,10 @@ async def get_next_sequence_number(sequence_name):
 async def is_valid_url(url):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.head(url) as resp:
-                return resp.status == 200
+            async with session.get(url) as resp:  # GET request to check validity
+                if resp.status == 200:
+                    content_type = resp.headers.get('Content-Type', '')
+                    return 'image' in content_type  # Ensure it's an image
     except:
         return False
 
