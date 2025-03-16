@@ -1,5 +1,4 @@
 import logging  
-
 from pyrogram import Client 
 
 from telegram.ext import Application
@@ -20,7 +19,7 @@ OWNER_ID = '7717913705'
 sudo_users = ["7717913705", "6898401947", "6898401947", "6898401947", "6898401947", "6898401947"]
 GROUP_ID = "-1002528887253"
 TOKEN = "6707312532:AAH_z0tWqS1lMHuchhZNluhdMvXtvstKyYM"
-mongo_url = "mongodb+srv://husbando:husbando@cluster0.pipkivx.mongodb.net/?retryWrites=true&w=majority"
+mongo_url = "mongodb+srv://botmaker9675208:botmaker9675208@cluster0.sc9mq8b.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 PHOTO_URL = ["/https://telegra.ph/file/aa06eb4b312f456e1fd28.jpg", "https://telegra.ph/file/aa06eb4b312f456e1fd28.jpg"]
 SUPPORT_CHAT = "seal_Your_WH_Group"
 UPDATE_CHAT = "SEAL_UPDATE"
