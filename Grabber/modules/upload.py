@@ -1,4 +1,4 @@
-import aiohttp
+import requests
 from pymongo import ReturnDocument
 from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext
@@ -17,14 +17,13 @@ async def get_next_sequence_number(sequence_name):
         return 0
     return sequence_document['sequence_value']
 
-# Validate image URL
-async def is_valid_url(url):
+# Validate image URL using requests
+def is_valid_url(url):
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:  # GET request to check validity
-                if resp.status == 200:
-                    content_type = resp.headers.get('Content-Type', '')
-                    return 'image' in content_type  # Ensure it's an image
+        response = requests.get(url, stream=True, timeout=10)
+        if response.status_code == 200:
+            content_type = response.headers.get('Content-Type', '')
+            return 'image' in content_type  # Ensure it's an image
     except:
         return False
 
@@ -64,7 +63,7 @@ async def upload(update: Update, context: CallbackContext) -> None:
         character_name = character_name.replace('-', ' ').title()
         anime_name = anime_name.replace('-', ' ').title()
 
-        if not await is_valid_url(image_url):
+        if not is_valid_url(image_url):
             await update.message.reply_text('❌ Invalid image URL. Please check and try again.')
             return
 
