@@ -1,7 +1,7 @@
 import requests
 from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext
-from Grabber import application  # Assuming this is your initialized bot
+from Grabber import application  # Your bot instance
 
 IMGBB_API_KEY = '5a5dadd79df17356e7250672f8b1b00b'
 
@@ -23,12 +23,21 @@ async def upload_to_imgbb(image_data):
 
 # Command handler for /gens
 async def gens(update: Update, context: CallbackContext) -> None:
-    if not update.message or not update.message.photo:
-        await update.message.reply_text("❌ Please send an image with this command.")
+    message = update.message
+    photo = None
+
+    # Check if command is a reply to an image
+    if message.reply_to_message and message.reply_to_message.photo:
+        photo = message.reply_to_message.photo[-1]
+    elif message.photo:
+        photo = message.photo[-1]
+
+    if not photo:
+        await update.message.reply_text("❌ Please send or reply to an image with this command.")
         return
 
     # Get the highest resolution image
-    file = await update.message.photo[-1].get_file()
+    file = await photo.get_file()
     image_data = file.file_path  # Get file URL
 
     # Upload to ImgBB
