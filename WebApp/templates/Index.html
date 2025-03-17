@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Character Shop</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script defer src="/static/script.js"></script>
+</head>
+<body>
+    <header>
+        <h1>🔥 Character Shop 🔥</h1>
+        <p id="balance">Balance: Loading...</p>
+    </header>
+
+    <div class="character-container" id="character-list">
+        <!-- Characters will be dynamically loaded here -->
+    </div>
+
+    <script>
+        const userId = new URLSearchParams(window.location.search).get("user_id");
+        if (!userId) {
+            alert("User ID is required!");
+        }
+    </script>
+</body>
+</html>
