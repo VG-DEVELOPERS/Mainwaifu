@@ -11,10 +11,13 @@ from pydantic import BaseModel
 app = FastAPI()
 
 # Mount static files (for CSS/JS)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/webapp", web_app)
 
-# Load Jinja2 templates (for rendering HTML pages)
-templates = Jinja2Templates(directory="templates")
+# Mount static files correctly
+app.mount("/static", StaticFiles(directory="WebApp/static"), name="static")
+
+# Load templates correctly
+templates = Jinja2Templates(directory="WebApp/templates")
 
 # Prices based on rarity
 RARITY_PRICES = {
