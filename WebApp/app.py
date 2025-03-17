@@ -6,12 +6,11 @@ from fastapi.templating import Jinja2Templates
 from motor.motor_asyncio import AsyncIOMotorClient
 from Grabber import user_collection, collection as character_collection
 from pydantic import BaseModel
-
 # Initialize FastAPI app
 app = FastAPI()
 
 # Mount static files (for CSS/JS)
-app.mount("/webapp", web_app)
+app.mount("/Webapp", Web_app)
 
 # Mount static files correctly
 app.mount("/static", StaticFiles(directory="WebApp/static"), name="static")
