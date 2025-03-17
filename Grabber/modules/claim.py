@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timedelta
 from pyrogram import Client, filters
-from pyrogram.errors import UserNotParticipant, ChatWriteForbidden, PeerIdInvalid
+from pyrogram.errors import UserNotParticipant, PeerIdInvalid
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from Grabber import application, user_collection, collection
 from Grabber import Grabberu as app
@@ -9,22 +9,29 @@ from Grabber import SUPPORT_CHAT, BOT_USERNAME
 
 # Constants
 ALLOWED_GROUP_ID = -1002528887253
-MUST_JOIN = "seal_Your_WH_Group"  # Replace with your main group username
-SECOND_JOIN = "seal_Your_WH_Group"  # Replace with second required channel
-COOLDOWN_DURATION = timedelta(days=1)  # Cooldown for 24 hours
+MUST_JOIN = "seal_Your_WH_Group"  # Main group username
+SECOND_JOIN = "seal_Your_WH_Group"  # Second required channel
+COOLDOWN_DURATION = timedelta(days=1)  # 24-hour cooldown
 
-# Rarity list
-RARITIES = [
-    '⚪ Common', '🟡 Legendary', '🟢 Medium', '💠 Cosmic', 
-    '💮 Exclusive', '🔮 Limited Edition', '🟠 Rare'
-]
+# Rarity list with weighted probability
+RARITY_WEIGHTS = {
+    '⚪ Common': 60,  # 60% chance
+    '🟢 Medium': 30,  # 30% chance
+    '🟠 Rare': 9,     # 9% chance
+    '🟡 Legendary': 1  # 1% chance
+}
 
 async def get_random_husbando():
-    """Fetch a random husbando from the database based on rarity."""
-    selected_rarity = random.choice(RARITIES)
+    """Fetch a random husbando from the database based on rarity probability."""
+    selected_rarity = random.choices(
+        list(RARITY_WEIGHTS.keys()), 
+        weights=list(RARITY_WEIGHTS.values()), 
+        k=1
+    )[0]  # Select based on probability
+
     try:
         pipeline = [
-            {'$match': {'rarity': selected_rarity}},  # Match rarity
+            {'$match': {'rarity': selected_rarity}},  # Match the chosen rarity
             {'$sample': {'size': 1}}  # Random sampling
         ]
         cursor = collection.aggregate(pipeline)
@@ -127,7 +134,12 @@ async def husbando_help(client: Client, message: Message):
         "**Instructions:**\n"
         f"1. Make sure you have joined both @{SUPPORT_CHAT} and @{MUST_JOIN}.\n"
         "2. Use `/claim` to claim a husbando. You can only claim once every 24 hours.\n\n"
-        "Happy claiming!"
+        "🎉 Rarity Chances:\n"
+        "⚪ Common - 60%\n"
+        "🟢 Medium - 30%\n"
+        "🟠 Rare - 9%\n"
+        "🟡 Legendary - 1%\n\n"
+        "Good luck and happy claiming!"
     )
     await message.reply_text(help_text)
-            
+    
