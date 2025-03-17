@@ -3,16 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Waifu Shop</title>
-    <script src="script.js" defer></script>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-        h1 { color: #333; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-    </style>
+    <title>Character Shop</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>Welcome to the Waifu Shop! 🛒</h1>
-    <p id="balance">Loading balance...</p>
+    <header>
+        <h1>🛒 Character Shop</h1>
+        <p id="balance">Loading balance...</p>
+    </header>
+    
+    <main>
+        <div id="characters" class="character-grid">
+            <!-- Characters will be dynamically added here -->
+        </div>
+    </main>
+
+    <script src="script.js"></script>
 </body>
 </html>
