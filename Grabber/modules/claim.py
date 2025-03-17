@@ -3,8 +3,6 @@ from pyrogram import Client, filters
 from Grabber import collection, user_collection, Grabberu as app
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
-
-
 # Allowed Group ID
 ALLOWED_GROUP_ID = -1002528887253
 CHANNEL_LINK = "https://t.me/seal_Your_WH_Group"
@@ -25,8 +23,9 @@ async def claim_character(client, message: Message):
 
     user_id = message.from_user.id
 
-    # Get a random character from the database
-    characters = list(collection.find({}))
+    # Convert cursor to a list properly (await is needed for MotorDB)
+    characters_cursor = collection.find({})
+    characters = await characters_cursor.to_list(length=1000)  # Adjust limit as needed
     
     if not characters:
         await message.reply("⚠️ No characters available in the database.")
@@ -39,7 +38,7 @@ async def claim_character(client, message: Message):
     bot_username = random_character.get("bot", "Unknown Bot")
 
     # Add to user's collection
-    user_collection.update_one(
+    await user_collection.update_one(
         {"user_id": user_id},
         {"$push": {"characters": random_character}},
         upsert=True
@@ -51,3 +50,4 @@ async def claim_character(client, message: Message):
         photo=file_id,
         caption=f"🎉 You claimed: **{character_name}**\n🤖 Bot: {bot_username}"
     )
+    
