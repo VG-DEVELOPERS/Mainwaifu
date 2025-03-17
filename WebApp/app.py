@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
-from Grabber import user_collection, character_collection  # Ensure correct imports
+from Grabber import user_collection, collection as character_collection  # Ensure correct imports
 
 app = FastAPI()
 
