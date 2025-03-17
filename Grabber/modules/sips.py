@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 from html import escape
 
-from GRABBER import collection, application
+from Grabber import collection, application
 
 async def search_character(update: Update, context: CallbackContext):
     # Get the name to search for from the command arguments
