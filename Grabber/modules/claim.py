@@ -1,6 +1,6 @@
 import random
 from pyrogram import Client, filters
-from Grabber import collection, user_collection, application as app
+from Grabber import collection, user_collection, Grabberu as app
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 
