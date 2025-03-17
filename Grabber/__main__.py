@@ -47,9 +47,9 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
 
         chat_frequency = await user_totals_collection.find_one({'chat_id': chat_id})
         if chat_frequency:
-            message_frequency = chat_frequency.get('message_frequency', 1)
+            message_frequency = chat_frequency.get('message_frequency', 100)
         else:
-            message_frequency = 1
+            message_frequency = 100
 
 
         if chat_id in last_user and last_user[chat_id]['user_id'] == user_id:
@@ -64,13 +64,13 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
                     warned_users[user_id] = time.time()
                     return
         else:
-            last_user[chat_id] = {'user_id': user_id, 'count': 100}
+            last_user[chat_id] = {'user_id': user_id, 'count': 1}
 
 
         if chat_id in message_counts:
-            message_counts[chat_id] += 100
+            message_counts[chat_id] += 1
         else:
-            message_counts[chat_id] = 100
+            message_counts[chat_id] = 1
 
 
         if message_counts[chat_id] % message_frequency == 0:
