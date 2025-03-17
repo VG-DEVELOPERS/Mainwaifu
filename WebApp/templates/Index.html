@@ -5,22 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Character Shop</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <script defer src="/static/script.js"></script>
 </head>
 <body>
-    <header>
-        <h1>🔥 Character Shop 🔥</h1>
-        <p id="balance">Balance: Loading...</p>
-    </header>
-
-    <div class="character-container" id="character-list">
-        <!-- Characters will be dynamically loaded here -->
+    <h1>Character Shop</h1>
+    <div id="characters">
+        {% for character in characters %}
+            <div class="character-card">
+                <img src="{{ character.image_url }}" alt="{{ character.name }}">
+                <h3>{{ character.name }}</h3>
+                <p>Rarity: {{ character.rarity }}</p>
+                <p>Price: 💰{{ character.price }} coins</p>
+                <button onclick="buyCharacter({{ character.id }})">Buy</button>
+            </div>
+        {% endfor %}
     </div>
 
     <script>
-        const userId = new URLSearchParams(window.location.search).get("user_id");
-        if (!userId) {
-            alert("User ID is required!");
+        function buyCharacter(characterId) {
+            const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id; // Auto-fetch Telegram User ID
+
+            if (!userId) {
+                alert("Error: Unable to fetch your Telegram ID.");
+                return;
+            }
+
+            fetch("/shop/purchase", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({ user_id: userId, character_id: characterId })
+            })
+            .then(response => response.json())
+            .then(data => alert(data.message))
+            .catch(error => alert("Error purchasing character: " + error));
         }
     </script>
 </body>
