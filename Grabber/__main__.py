@@ -166,7 +166,7 @@ async def find_limited(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(f"You have {len(limited_chars)} Limited Edition characters:\n" + "\n".join(limited_chars))
 def main() -> None:
     """Run bot."""
-    application.add_handler(CommandHandler("seal", seal, block=False))
+    application.add_handler(CommandHandler("seal", guess, block=False))
     application.add_handler(CommandHandler("fav", fav, block=False))
     application.add_handler(CommandHandler("find_limited", find_limited, block=False))  # Changed to find_limited
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
