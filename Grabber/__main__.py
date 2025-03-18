@@ -12,118 +12,53 @@ from Grabber import collection, user_totals_collection, user_collection, top_glo
 from Grabber import application, LOGGER
 from Grabber.modules import ALL_MODULES
 
-# Import all modules
+# Load all modules
 for module_name in ALL_MODULES:
     importlib.import_module("Grabber.modules." + module_name)
 
-# Track message counts, character spawns, and rarity control
+# Bot tracking data
 locks = {}
 message_counts = {}
 last_characters = {}
 sent_characters = {}
 first_correct_guesses = {}
 warned_users = {}
+last_user = {}
 total_seals = {}
-rarity_spawn_index = {}
 
-# Rarity mapping with their respective conditions
+# Rarity mapping
 rarity_map = {
-    1: "⚪ Common",
-    2: "🟢 Medium",
-    3: "🟠 Rare",
-    4: "🟡 Legendary",
-    5: "💠 Cosmic",
-    6: "💮 Exclusive",
+    1: "⚪ Common", 
+    2: "🟢 Medium", 
+    3: "🟠 Rare", 
+    4: "🟡 Legendary", 
+    5: "💠 Cosmic", 
+    6: "💮 Exclusive", 
     7: "🔮 Limited Edition"
 }
 
-# Spawn frequency conditions
-rarity_spawn_counts = {
-    "⚪ Common": 5,
-    "🟢 Medium": 3,
-    "🟠 Rare": 2,
-    "🟡 Legendary": 1
-}
-special_rarity_thresholds = {
-    "💠 Cosmic": {"messages": 5000, "seals": 200},
-    "💮 Exclusive": {"messages": 10000, "seals": 100},
-    "🔮 Limited Edition": {"messages": 15000, "limit": 50}
-}
+# Spawn frequency mapping
+rarity_spawn_counts = [
+    ("⚪ Common", 5), 
+    ("🟢 Medium", 3), 
+    ("🟠 Rare", 2), 
+    ("🟡 Legendary", 1), 
+    ("💠 Cosmic", 2), 
+    ("💮 Exclusive", 1), 
+    ("🔮 Limited Edition", 1)
+]
 
-async def message_counter(update: Update, context: CallbackContext) -> None:
-    """Tracks messages and spawns characters based on conditions."""
-    chat_id = str(update.effective_chat.id)
-    
-    if chat_id not in message_counts:
-        message_counts[chat_id] = 0
-    message_counts[chat_id] += 1
+# Message thresholds for special rarity spawns
+cosmic_threshold = 5000
+exclusive_threshold = 10000
+limited_edition_threshold = 15000
+seal_limit = 50
+cosmic_seal_required = 200
+exclusive_seal_required = 100
 
-    # Determine rarity to spawn
-    rarity = get_rarity_to_spawn(chat_id)
-
-    # Fetch character of that rarity
-    character = await get_character_by_rarity(rarity)
-
-    if not character:
-        LOGGER.warning(f"No characters available for rarity {rarity}.")
-        return
-
-    sent_characters[chat_id] = character
-    last_characters[chat_id] = character
-
-    await context.bot.send_photo(
-        chat_id=chat_id,
-        photo=character['img_url'],
-        caption=f"A New {character['rarity']} Character Appeared...\nUse /seal <name> to add to your collection!",
-        parse_mode='Markdown'
-    )
-
-def get_rarity_to_spawn(chat_id):
-    """Determines which rarity to spawn based on message count."""
-    count = message_counts[chat_id]
-
-    for rarity, threshold in special_rarity_thresholds.items():
-        if "messages" in threshold and count >= threshold["messages"]:
-            return rarity
-
-    for rarity, frequency in rarity_spawn_counts.items():
-        if count % frequency == 0:
-            return rarity
-
-    return "⚪ Common"
-
-async def get_character_by_rarity(rarity):
-    """Fetch a random character of the given rarity."""
-    characters = await collection.find({'rarity': rarity}).to_list(length=None)
-    return random.choice(characters) if characters else None
-
-async def seal(update: Update, context: CallbackContext) -> None:
-    """Allows users to collect the character by guessing correctly."""
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-
-    if chat_id not in last_characters:
-        return
-
-    guess = ' '.join(context.args).strip().lower() if context.args else ''
-
-    character_name = last_characters[chat_id]['name'].lower()
-    if guess == character_name:
-        await add_character_to_user(user_id, last_characters[chat_id])
-        await update.message.reply_text(f"✅ {character_name} has been sealed into your collection!")
-    else:
-        await update.message.reply_text("❌ Wrong guess! Try again.")
-
-async def add_character_to_user(user_id, character):
-    """Adds a character to a user's collection."""
-    await user_collection.update_one(
-        {'id': user_id},
-        {'$push': {'characters': character}},
-        upsert=True
-    )
-
+# Function to mark favorite character by ID
 async def fav(update: Update, context: CallbackContext) -> None:
-    """Marks a character as favorite by ID."""
+    """Marks a character as favorite using character ID."""
     user_id = update.effective_user.id
 
     if not context.args:
@@ -148,13 +83,122 @@ async def fav(update: Update, context: CallbackContext) -> None:
         {'$set': {'characters.$.fav': True}}
     )
 
-    await update.message.reply_text(f"⭐ {matched_character['name']} has been added to your favorites!")
+    await update.message.reply_text(f"⭐ {matched_character['name']} has been marked as your favorite!")
+
+# Function to spawn characters based on frequency
+async def spawn_character(update: Update, context: CallbackContext) -> None:
+    chat_id = str(update.effective_chat.id)
+
+    # Fetch total messages for the chat
+    chat_data = await user_totals_collection.find_one({'chat_id': chat_id})
+    total_messages = chat_data.get('total_messages', 0) if chat_data else 0
+
+    # Select rarity based on message count
+    if total_messages >= limited_edition_threshold:
+        rarity = "🔮 Limited Edition"
+    elif total_messages >= exclusive_threshold:
+        rarity = "💮 Exclusive"
+    elif total_messages >= cosmic_threshold:
+        rarity = "💠 Cosmic"
+    else:
+        rarity = random.choice([r[0] for r in rarity_spawn_counts])
+
+    # Fetch character from database
+    character = await collection.find_one({'rarity': rarity})
+
+    if not character:
+        await update.message.reply_text(f"⚠️ No characters available for rarity {rarity}.")
+        return
+
+    # Store last character for guess check
+    last_characters[chat_id] = character
+    sent_characters[chat_id] = character['id']
+
+    await context.bot.send_photo(
+        chat_id=chat_id,
+        photo=character['img_url'],
+        caption=f"A new {character['rarity']} character appeared!\nUse /seal <name> to collect.",
+        parse_mode='Markdown'
+    )
+
+# Function to seal (capture) character
+async def seal(update: Update, context: CallbackContext) -> None:
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+
+    if chat_id not in last_characters:
+        return
+
+    if chat_id in first_correct_guesses:
+        await update.message.reply_text("❌ Already sealed by someone! Try next time.")
+        return
+
+    guess = ' '.join(context.args).lower() if context.args else ''
+    correct_name = last_characters[chat_id]['name'].lower()
+
+    if correct_name == guess:
+        first_correct_guesses[chat_id] = user_id
+
+        # Store user details
+        user = await user_collection.find_one({'id': user_id})
+        if user:
+            await user_collection.update_one(
+                {'id': user_id}, 
+                {'$push': {'characters': last_characters[chat_id]}}
+            )
+        else:
+            await user_collection.insert_one({
+                'id': user_id,
+                'characters': [last_characters[chat_id]],
+            })
+
+        # Increase chat total seals
+        total_seals[chat_id] = total_seals.get(chat_id, 0) + 1
+
+        # Stop spawning if seal limit is reached
+        if total_seals[chat_id] >= seal_limit:
+            await update.message.reply_text("⚠️ Seal limit reached for this chat!")
+            return
+
+        await update.message.reply_text(f"✅ {last_characters[chat_id]['name']} has been sealed and added to your collection!")
+
+    else:
+        await update.message.reply_text("❌ Incorrect name! Try again.")
+
+# Function to set custom frequency
+async def set_frequency(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    chat_id = str(update.effective_chat.id)
+
+    if user_id != 7717913705:
+        await update.message.reply_text("❌ You don't have permission to set the frequency.")
+        return
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("⚠️ Usage: /setfrequency <number>")
+        return
+
+    frequency = int(context.args[0])
+
+    if frequency < 1:
+        await update.message.reply_text("⚠️ Frequency must be at least 1 message.")
+        return
+
+    await user_totals_collection.update_one(
+        {'chat_id': chat_id},
+        {'$set': {'message_frequency': frequency}},
+        upsert=True
+    )
+
+    await update.message.reply_text(f"✅ Spawn frequency set to {frequency} messages.")
 
 # Register bot commands
-application.add_handler(CommandHandler("seal", seal, block=False))
 application.add_handler(CommandHandler("fav", fav, block=False))
-application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
+application.add_handler(CommandHandler("seal", seal, block=False))
+application.add_handler(CommandHandler("setfrequency", set_frequency, block=False))
+application.add_handler(MessageHandler(filters.ALL, spawn_character, block=False))
 
+# Start bot
 if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
