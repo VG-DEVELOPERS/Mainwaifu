@@ -8,22 +8,20 @@ from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
-from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
+from grabber import (collection, top_global_groups_collection, group_user_totals_collection,
                      user_collection, user_totals_collection, Grabberu)
-from Grabber import application, LOGGER
-from Grabber.modules import ALL_MODULES
+from grabber import application, LOGGER
+from grabber.modules import ALL_MODULES
 
 # Load all modules
 for module_name in ALL_MODULES:
-    importlib.import_module("Grabber.modules." + module_name)
+    importlib.import_module("grabber.modules." + module_name)
 
 # Data tracking
 locks = {}
 message_counts = {}
-last_characters = {}
-sent_characters = {}
+last_characters = {}  # Stores the last spawned character for each chat
 first_correct_guesses = {}
-waifu_message = {}
 total_seals = {}
 
 # Rarity Mapping
@@ -51,10 +49,6 @@ exclusive_threshold = 10000
 limited_edition_threshold = 15000
 seal_limit = 50
 
-# Seal Requirements for Special Rarities
-cosmic_seal_required = 200
-exclusive_seal_required = 100
-
 def escape_markdown(text):
     escape_chars = r'\*_`\\~>#+-=|{}.!'
     return re.sub(r'([%s])' % re.escape(escape_chars), r'\\\1', text)
@@ -62,7 +56,6 @@ def escape_markdown(text):
 # Track Messages and Trigger Character Spawns
 async def message_counter(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
-    user_id = update.effective_user.id
 
     if chat_id not in locks:
         locks[chat_id] = asyncio.Lock()
@@ -86,9 +79,6 @@ async def spawn_character(update: Update, context: CallbackContext) -> None:
     chat_data = await user_totals_collection.find_one({'chat_id': chat_id})
     total_messages = chat_data.get('total_messages', 0) if chat_data else 0
 
-    if chat_id not in sent_characters:
-        sent_characters[chat_id] = []
-
     # Determine rarity based on message count
     if total_messages >= limited_edition_threshold:
         rarity = "🔮 Limited Edition"
@@ -102,53 +92,38 @@ async def spawn_character(update: Update, context: CallbackContext) -> None:
             [r[1] for r in rarity_spawn_counts]
         )[0]
 
-    # Fetch unique character from database (not repeated in chat)
-    available_characters = await collection.find({'rarity': rarity, 'id': {'$nin': sent_characters[chat_id]}}).to_list(length=None)
+    # Fetch a unique character from the database
+    character = await collection.find_one({'rarity': rarity})
 
-    if not available_characters:
+    if not character:
         await update.message.reply_text(f"⚠️ No available characters for rarity {rarity}.")
         return
 
-    character = random.choice(available_characters)
-    
-    # Track spawned characters (so they don’t appear again in chat)
-    sent_characters[chat_id].append(character['id'])
-    last_characters[chat_id] = character
+    last_characters[chat_id] = character  # Store the spawned character
 
-    if chat_id in first_correct_guesses:
-        del first_correct_guesses[chat_id]
-
-    waifu_message[chat_id] = await context.bot.send_photo(
+    await context.bot.send_photo(
         chat_id=chat_id,
         photo=character['img_url'],
         caption=f"A {rarity} character appeared! Use /guess <name> to capture.",
         parse_mode='Markdown'
     )
 
-# Seal (Capture) Character
+# Capture (Seal) Character
 async def guess(update: Update, context: CallbackContext) -> None:
-    chat_id = update.effective_chat.id
+    chat_id = str(update.effective_chat.id)
     user_id = update.effective_user.id
 
     if chat_id not in last_characters:
         await update.message.reply_text("❌ No character available to capture. Wait for the next spawn.")
         return
 
-    if chat_id in first_correct_guesses:
-        last_grabber_id = first_correct_guesses[chat_id]
-        await update.message.reply_text(f"⚠️ Character already captured by <a href='tg://user?id={last_grabber_id}'>another user</a>.", parse_mode='HTML')
-        return
-
+    character = last_characters[chat_id]  # Retrieve last spawned character
     guess_name = ' '.join(context.args).lower() if context.args else ''
-    character = last_characters[chat_id]
     correct_name = character['name'].lower()
 
-    if correct_name == guess_name:
-        first_correct_guesses[chat_id] = user_id
-
+    if guess_name == correct_name:
         user = await user_collection.find_one({'id': user_id})
 
-        # Users can grab the same character multiple times
         if user:
             await user_collection.update_one({'id': user_id}, {'$push': {'characters': character}})
         else:
@@ -161,7 +136,7 @@ async def guess(update: Update, context: CallbackContext) -> None:
 
         await update.message.reply_text(f"✅ {character['name']} has been added to your collection!")
 
-        del last_characters[chat_id]
+        del last_characters[chat_id]  # Remove character after it's sealed
 
     else:
         await update.message.reply_text("❌ Incorrect name! Try again.")
@@ -201,4 +176,4 @@ if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
     application.run_polling(drop_pending_updates=True)
-                                  
+  
