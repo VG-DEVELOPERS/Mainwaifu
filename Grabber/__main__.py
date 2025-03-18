@@ -37,15 +37,12 @@ rarity_map = {
     7: "🔮 Limited Edition"
 }
 
-# Spawn frequency mapping
+# Spawn frequency mapping (only for normal spawn)
 rarity_spawn_counts = [
     ("⚪ Common", 5), 
     ("🟢 Medium", 3), 
     ("🟠 Rare", 2), 
-    ("🟡 Legendary", 1), 
-    ("💠 Cosmic", 2), 
-    ("💮 Exclusive", 1), 
-    ("🔮 Limited Edition", 1)
+    ("🟡 Legendary", 1)
 ]
 
 # Message thresholds for special rarity spawns
@@ -93,7 +90,7 @@ async def spawn_character(update: Update, context: CallbackContext) -> None:
     chat_data = await user_totals_collection.find_one({'chat_id': chat_id})
     total_messages = chat_data.get('total_messages', 0) if chat_data else 0
 
-    # Select rarity based on message count
+    # Determine rarity based on message count
     if total_messages >= limited_edition_threshold:
         rarity = "🔮 Limited Edition"
     elif total_messages >= exclusive_threshold:
@@ -101,7 +98,10 @@ async def spawn_character(update: Update, context: CallbackContext) -> None:
     elif total_messages >= cosmic_threshold:
         rarity = "💠 Cosmic"
     else:
-        rarity = random.choice([r[0] for r in rarity_spawn_counts])
+        rarity = random.choices(
+            [r[0] for r in rarity_spawn_counts],
+            [r[1] for r in rarity_spawn_counts]
+        )[0]
 
     # Fetch character from database
     character = await collection.find_one({'rarity': rarity})
@@ -203,4 +203,3 @@ if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
     application.run_polling(drop_pending_updates=True)
-    
