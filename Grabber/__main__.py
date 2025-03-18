@@ -24,7 +24,7 @@ last_characters = {}
 first_correct_guesses = {}
 
 # Default spawn frequency (fallback)
-DEFAULT_FREQUENCY = 1  
+DEFAULT_FREQUENCY = 5  
 
 # Escape Markdown function
 def escape_markdown(text):
@@ -94,9 +94,73 @@ async def spawn_character(update: Update, context: CallbackContext) -> None:
     await context.bot.send_photo(
         chat_id=chat_id,
         photo=character['img_url'],
-        caption=f"A **{character['rarity']}** character appeared!\nUse `/guess <character name>` to collect!",
+        caption=f"A **{character['rarity']}** character appeared!\nUse `/seal <character name>` to collect!",
         parse_mode='Markdown'
     )
+
+# Seal (Capture) Command
+async def seal(update: Update, context: CallbackContext) -> None:
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+
+    if chat_id not in last_characters:
+        await update.message.reply_text("❌ No character is available to seal right now!")
+        return
+
+    if chat_id in first_correct_guesses:
+        await update.message.reply_text("❌ Someone already sealed this character. Try next time!")
+        return
+
+    guess = ' '.join(context.args).lower() if context.args else ''
+
+    if "()" in guess or "&" in guess.lower():
+        await update.message.reply_text("❌ Invalid input! Special characters are not allowed.")
+        return
+
+    name_parts = last_characters[chat_id]['name'].lower().split()
+    if sorted(name_parts) == sorted(guess.split()) or any(part == guess for part in name_parts):
+        first_correct_guesses[chat_id] = user_id
+
+        await user_collection.update_one(
+            {'id': user_id}, 
+            {'$set': {'username': update.effective_user.username, 'first_name': update.effective_user.first_name}, 
+             '$push': {'characters': last_characters[chat_id]}}, upsert=True
+        )
+
+        keyboard = [[InlineKeyboardButton("View Harem", switch_inline_query_current_chat=f"collection.{user_id}")]]
+        await update.message.reply_text(
+            f'✅ <b>{escape(update.effective_user.first_name)}</b> sealed a new character!\n'
+            f'👤 **Name:** {last_characters[chat_id]["name"]}\n'
+            f'📺 **Anime:** {last_characters[chat_id]["anime"]}\n'
+            f'🌟 **Rarity:** {last_characters[chat_id]["rarity"]}\n\n'
+            'This character has been added to your harem! Use /harem to view your collection.',
+            parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        await update.message.reply_text("❌ Incorrect name! Try again.")
+
+# Favorite Character Command
+async def fav(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+
+    if not context.args:
+        await update.message.reply_text("❌ Please provide a character ID.")
+        return
+
+    character_id = context.args[0]
+    user = await user_collection.find_one({'id': user_id})
+
+    if not user:
+        await update.message.reply_text("❌ You haven't sealed any characters yet.")
+        return
+
+    character = next((c for c in user['characters'] if c['id'] == character_id), None)
+    if not character:
+        await update.message.reply_text("❌ Character not found in your collection.")
+        return
+
+    await user_collection.update_one({'id': user_id}, {'$set': {'favorites': [character_id]}})
+    await update.message.reply_text(f"⭐ {character['name']} has been added to your favorites!")
 
 # Set Frequency Command
 async def set_frequency(update: Update, context: CallbackContext) -> None:
@@ -120,14 +184,9 @@ async def set_frequency(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text(f"✅ Spawn frequency set to {frequency} messages.")
 
 # Start Bot
-def main() -> None:
-    application.add_handler(CommandHandler("setfrequency", set_frequency, block=False))
-    application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
+application.add_handler(CommandHandler("seal", seal, block=False))
+application.add_handler(CommandHandler("fav", fav, block=False))
+application.add_handler(CommandHandler("setfrequency", set_frequency, block=False))
+application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
 
-    application.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    Grabberu.start()
-    LOGGER.info("Bot started")
-    main()
-    
+application.run_polling(drop_pending_updates=True)
