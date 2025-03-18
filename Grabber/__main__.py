@@ -8,10 +8,10 @@ from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
-from shivu import (collection, top_global_groups_collection, group_user_totals_collection,
-                   user_collection, user_totals_collection, shivuu)
-from shivu import application, LOGGER
-from shivu.modules import ALL_MODULES
+from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
+                   user_collection, user_totals_collection, Grabberu)
+from Grabber import application, LOGGER
+from Grabber.modules import ALL_MODULES
 
 # Load all modules
 for module_name in ALL_MODULES:
