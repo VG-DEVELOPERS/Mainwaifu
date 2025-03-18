@@ -1,196 +1,210 @@
-import importlib
-import time
-import random
-import asyncio
-import re
-from html import escape 
+import urllib.request
+import requests
+from pymongo import ReturnDocument
+from telegram import Update
+from telegram.ext import CommandHandler, CallbackContext
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
+from Grabber import application, sudo_users, collection, db, CHARA_CHANNEL_ID, SUPPORT_CHAT
 
-from Grabber import collection, user_totals_collection, user_collection, top_global_groups_collection, group_user_totals_collection, Grabberu
-from Grabber import application, LOGGER
-from Grabber.modules import ALL_MODULES
+IMGBB_API_KEY = '5a5dadd79df17356e7250672f8b1b00b'
 
-# Import all modules
-for module_name in ALL_MODULES:
-    importlib.import_module("Grabber.modules." + module_name)
+WRONG_FORMAT_TEXT = """Wrong ❌️ format...  eg. /upload Img_url muzan-kibutsuji Demon-slayer 3
 
-# Track user messages and bot logic
-locks = {}
-message_counts = {}
-last_characters = {}
-sent_characters = {}
-first_correct_guesses = {}
-warned_users = {}
-last_user = {}
+img_url character-name anime-name rarity-number
 
-# Character spawn frequency mapping
-rarity_map = {
-    1: "⚪ Common", 
-    2: "🟢 Medium", 
-    3: "🟠 Rare", 
-    4: "🟡 Legendary", 
-    5: "💠 Cosmic", 
-    6: "💮 Exclusive", 
-    7: "🔮 Limited Edition"
-}
+use rarity number accordingly rarity Map
 
-rarity_spawn_counts = {
-    "⚪ Common": 5, 
-    "🟢 Medium": 3, 
-    "🟠 Rare": 2, 
-    "🟡 Legendary": 1, 
-    "💠 Cosmic": 2, 
-    "💮 Exclusive": 1, 
-    "🔮 Limited Edition": 1
-}
+rarity_map = (⚪ Common=1)  (🟠 Rare=2) (🟡 Legendary=3)(🟢 Medium=4) (💠 Cosmic=5) (💮 Exclusive=6) (🔮 Limited Edition=7)"""
 
-async def message_counter(update: Update, context: CallbackContext) -> None:
-    """Tracks messages and triggers character spawns."""
-    chat_id = str(update.effective_chat.id)
-    user_id = update.effective_user.id
 
-    if chat_id not in locks:
-        locks[chat_id] = asyncio.Lock()
+# Function to handle character ID sequence
+async def get_next_sequence_number(sequence_name):
+    sequence_collection = db.sequences
+    sequence_document = await sequence_collection.find_one_and_update(
+        {'_id': sequence_name},
+        {'$inc': {'sequence_value': 1}},
+        return_document=ReturnDocument.AFTER
+    )
+    if not sequence_document:
+        await sequence_collection.insert_one({'_id': sequence_name, 'sequence_value': 0})
+        return 0
+    return sequence_document['sequence_value']
 
-    async with locks[chat_id]:
-        chat_settings = await user_totals_collection.find_one({'chat_id': chat_id})
-        message_frequency = chat_settings.get('message_frequency', 5) if chat_settings else 5
 
-        if chat_id in last_user and last_user[chat_id]['user_id'] == user_id:
-            last_user[chat_id]['count'] += 1
-            if last_user[chat_id]['count'] >= 10:
-                if user_id in warned_users and time.time() - warned_users[user_id] < 600:
-                    return
-                await update.message.reply_text(f"⚠️ Stop spamming {update.effective_user.first_name}! Messages will be ignored for 10 minutes.")
-                warned_users[user_id] = time.time()
+# Function to upload image to ImgBB
+async def upload_to_imgbb(image_url):
+    try:
+        response = requests.post(
+            "https://api.imgbb.com/1/upload",
+            data={
+                'key': IMGBB_API_KEY,
+                'image': image_url
+            }
+        )
+        response_data = response.json()
+
+        if response_data['success']:
+            return response_data['data']['url']
+        else:
+            return None
+    except Exception as e:
+        print(f"Error uploading to ImgBB: {str(e)}")
+        return None
+
+
+# Upload command
+async def upload(update: Update, context: CallbackContext) -> None:
+    if str(update.effective_user.id) not in sudo_users:
+        await update.message.reply_text('Ask My Owner...')
+        return
+
+    try:
+        args = context.args
+        if len(args) != 4:
+            await update.message.reply_text(WRONG_FORMAT_TEXT)
+            return
+
+        character_name = args[1].replace('-', ' ').title()
+        anime = args[2].replace('-', ' ').title()
+
+        try:
+            urllib.request.urlopen(args[0])
+        except:
+            await update.message.reply_text('Invalid URL.')
+            return
+
+        # Upload the image to ImgBB
+        imgbb_url = await upload_to_imgbb(args[0])
+        if not imgbb_url:
+            await update.message.reply_text('Failed to upload image to ImgBB.')
+            return
+
+        rarity_map = {1: "⚪ Common", 2: "🟠 Rare", 3: "🟡 Legendary", 4: "🟢 Medium", 5: "💠 Cosmic", 6: "💮 Exclusive", 7: "🔮 Limited Edition"}
+        try:
+            rarity = rarity_map[int(args[3])]
+        except KeyError:
+            await update.message.reply_text('Invalid rarity. Please use 1, 2, 3, or 4.')
+            return
+
+        id = str(await get_next_sequence_number('character_id')).zfill(2)
+
+        character = {
+            'img_url': imgbb_url,
+            'name': character_name,
+            'anime': anime,
+            'rarity': rarity,
+            'id': id
+        }
+
+        try:
+            message = await context.bot.send_photo(
+                chat_id=CHARA_CHANNEL_ID,
+                photo=imgbb_url,
+                caption=f'<b>Character Name:</b> {character_name}\n<b>Anime Name:</b> {anime}\n<b>Rarity:</b> {rarity}\n<b>ID:</b> {id}\nAdded by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
+                parse_mode='HTML'
+            )
+            character['message_id'] = message.message_id
+            await collection.insert_one(character)
+            await update.message.reply_text('CHARACTER ADDED....')
+        except Exception as e:
+            await collection.insert_one(character)
+            await update.message.reply_text(f'Character Added but no Database Channel Found. Error: {str(e)}')
+
+    except Exception as e:
+        await update.message.reply_text(f'Character Upload Unsuccessful. Error: {str(e)}')
+
+
+# Delete command
+async def delete(update: Update, context: CallbackContext) -> None:
+    if str(update.effective_user.id) not in sudo_users:
+        await update.message.reply_text('Ask my Owner to use this Command...')
+        return
+
+    try:
+        args = context.args
+        if len(args) != 1:
+            await update.message.reply_text('Incorrect format... Please use: /delete ID')
+            return
+
+        character = await collection.find_one_and_delete({'id': args[0]})
+
+        if character:
+            await context.bot.delete_message(chat_id=CHARA_CHANNEL_ID, message_id=character['message_id'])
+            await update.message.reply_text('DONE')
+        else:
+            await update.message.reply_text('Deleted Successfully from db, but character not found In Channel')
+    except Exception as e:
+        await update.message.reply_text(f'{str(e)}')
+
+
+# Update command
+async def update(update: Update, context: CallbackContext) -> None:
+    if str(update.effective_user.id) not in sudo_users:
+        await update.message.reply_text('You do not have permission to use this command.')
+        return
+
+    try:
+        args = context.args
+        if len(args) != 3:
+            await update.message.reply_text('Incorrect format. Please use: /update id field new_value')
+            return
+
+        # Get character by ID
+        character = await collection.find_one({'id': args[0]})
+        if not character:
+            await update.message.reply_text('Character not found.')
+            return
+
+        # Check if field is valid
+        valid_fields = ['img_url', 'name', 'anime', 'rarity']
+        if args[1] not in valid_fields:
+            await update.message.reply_text(f'Invalid field. Please use one of the following: {", ".join(valid_fields)}')
+            return
+
+        # Update field
+        if args[1] in ['name', 'anime']:
+            new_value = args[2].replace('-', ' ').title()
+        elif args[1] == 'rarity':
+            rarity_map = {1: "⚪ Common", 2: "🟠 Rare", 3: "🟡 Legendary", 4: "🟢 Medium", 5: "💠 Cosmic", 6: "💮 Exclusive", 7: "🔮 Limited Edition"}
+            try:
+                new_value = rarity_map[int(args[2])]
+            except KeyError:
+                await update.message.reply_text('Invalid rarity. Please use 1, 2, 3, 4, or 5.')
                 return
         else:
-            last_user[chat_id] = {'user_id': user_id, 'count': 1}
+            new_value = args[2]
 
-        message_counts[chat_id] = message_counts.get(chat_id, 0) + 1
+        await collection.find_one_and_update({'id': args[0]}, {'$set': {args[1]: new_value}})
 
-        if message_counts[chat_id] % message_frequency == 0:
-            await send_character(update, context)
-            message_counts[chat_id] = 0
+        if args[1] == 'img_url':
+            await context.bot.delete_message(chat_id=CHARA_CHANNEL_ID, message_id=character['message_id'])
+            message = await context.bot.send_photo(
+                chat_id=CHARA_CHANNEL_ID,
+                photo=new_value,
+                caption=f'<b>Character Name:</b> {character["name"]}\n<b>Anime Name:</b> {character["anime"]}\n<b>Rarity:</b> {character["rarity"]}\n<b>ID:</b> {character["id"]}\nUpdated by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
+                parse_mode='HTML'
+            )
+            character['message_id'] = message.message_id
+            await collection.find_one_and_update({'id': args[0]}, {'$set': {'message_id': message.message_id}})
+        else:
+            await context.bot.edit_message_caption(
+                chat_id=CHARA_CHANNEL_ID,
+                message_id=character['message_id'],
+                caption=f'<b>Character Name:</b> {character["name"]}\n<b>Anime Name:</b> {character["anime"]}\n<b>Rarity:</b> {character["rarity"]}\n<b>ID:</b> {character["id"]}\nUpdated by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
+                parse_mode='HTML'
+            )
 
-async def send_character(update: Update, context: CallbackContext) -> None:
-    """Sends a character image based on rarity spawn frequency."""
-    chat_id = update.effective_chat.id
+        await update.message.reply_text('Updated Done in Database.... But sometimes it Takes Time to edit Caption in Your Channel..So wait..')
+    except Exception as e:
+        await update.message.reply_text(f'I guess did not added bot in channel.. or character uploaded Long time ago.. Or character not exits.. orr Wrong id')
 
-    if chat_id not in sent_characters:
-        sent_characters[chat_id] = {}
 
-    for rarity, count in rarity_spawn_counts.items():
-        sent_characters[chat_id][rarity] = sent_characters[chat_id].get(rarity, 0) + 1
-        if sent_characters[chat_id][rarity] >= count:
-            sent_characters[chat_id][rarity] = 0
-            break
-    else:
-        rarity = "⚪ Common"
+# Handlers
+UPLOAD_HANDLER = CommandHandler('upload', upload, block=False)
+application.add_handler(UPLOAD_HANDLER)
 
-    available_characters = await collection.find({'rarity': rarity}).to_list(length=None)
-    
-    if not available_characters:
-        LOGGER.warning(f"No characters available for rarity {rarity}")
-        return
+DELETE_HANDLER = CommandHandler('delete', delete, block=False)
+application.add_handler(DELETE_HANDLER)
 
-    character = random.choice(available_characters)
-    last_characters[chat_id] = character
-
-    await context.bot.send_photo(
-        chat_id=chat_id,
-        photo=character['img_url'],
-        caption=f"A {character['rarity']} character appeared!\nUse /seal <name> to capture it.",
-        parse_mode='Markdown'
-    )
-
-async def seal(update: Update, context: CallbackContext) -> None:
-    """Captures a character if the name is guessed correctly."""
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-
-    if chat_id not in last_characters:
-        await update.message.reply_text("No character to capture.")
-        return
-
-    if chat_id in first_correct_guesses:
-        await update.message.reply_text(f'❌ Already captured by someone else.')
-        return
-
-    guess = ' '.join(context.args).lower() if context.args else ''
-    name_parts = last_characters[chat_id]['name'].lower().split()
-
-    if sorted(name_parts) == sorted(guess.split()) or any(part == guess for part in name_parts):
-        first_correct_guesses[chat_id] = user_id
-        character = last_characters[chat_id]
-
-        await user_collection.update_one({'id': user_id}, {'$push': {'characters': character}}, upsert=True)
-        await group_user_totals_collection.update_one({'user_id': user_id, 'group_id': chat_id}, {'$inc': {'count': 1}}, upsert=True)
-        await top_global_groups_collection.update_one({'group_id': chat_id}, {'$inc': {'count': 1}}, upsert=True)
-
-        keyboard = [[InlineKeyboardButton(f"See Harem", switch_inline_query_current_chat=f"collection.{user_id}")]]
-        await update.message.reply_text(
-            f'🎉 <b>{escape(update.effective_user.first_name)}</b> captured {character["name"]}!\nRarity: {character["rarity"]}',
-            parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        await update.message.reply_text('❌ Incorrect name. Try again!')
-
-async def fav(update: Update, context: CallbackContext) -> None:
-    """Adds/removes a character from favorites."""
-    user_id = update.effective_user.id
-
-    if not context.args:
-        await update.message.reply_text('Provide a character ID to favorite.')
-        return
-
-    character_id = context.args[0]
-    user = await user_collection.find_one({'id': user_id})
-
-    if not user:
-        await update.message.reply_text('You have no characters.')
-        return
-
-    character = next((c for c in user['characters'] if c['id'] == character_id), None)
-    if not character:
-        await update.message.reply_text('Character not found in your collection.')
-        return
-
-    if 'favorites' in user and character_id in user['favorites']:
-        await user_collection.update_one({'id': user_id}, {'$pull': {'favorites': character_id}})
-        await update.message.reply_text(f'❌ Removed {character["name"]} from favorites.')
-    else:
-        await user_collection.update_one({'id': user_id}, {'$push': {'favorites': character_id}})
-        await update.message.reply_text(f'⭐ {character["name"]} added to favorites!')
-
-async def set_frequency(update: Update, context: CallbackContext) -> None:
-    """Sets message frequency for spawning characters (admin only)."""
-    user_id = update.effective_user.id
-    chat_id = str(update.effective_chat.id)
-
-    if user_id != 7717913705:
-        await update.message.reply_text("❌ You don't have permission to set frequency.")
-        return
-
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("⚠️ Usage: /setfrequency <number>")
-        return
-
-    frequency = max(1, int(context.args[0]))
-    await user_totals_collection.update_one({'chat_id': chat_id}, {'$set': {'message_frequency': frequency}}, upsert=True)
-    await update.message.reply_text(f"✅ Spawn frequency set to {frequency} messages.")
-
-# Register bot commands
-application.add_handler(CommandHandler("seal", seal, block=False))
-application.add_handler(CommandHandler("fav", fav, block=False))
-application.add_handler(CommandHandler("setfrequency", set_frequency, block=False))
-application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
-
-# Start bot
-if __name__ == "__main__":
-    Grabberu.start()
-    LOGGER.info("Bot started")
-    application.run_polling(drop_pending_updates=True)
-    
+UPDATE_HANDLER = CommandHandler('update', update, block=False)
+application.add_handler(UPDATE_HANDLER)
