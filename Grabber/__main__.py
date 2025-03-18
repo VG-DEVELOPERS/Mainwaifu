@@ -73,7 +73,7 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
 
     async with lock:
         chat_frequency = await user_totals_collection.find_one({'chat_id': chat_id})
-        message_frequency = chat_frequency.get('message_frequency', 1) if chat_frequency else 1
+        message_frequency = chat_frequency.get('message_frequency', 100) if chat_frequency else 100
 
         if chat_id in last_user and last_user[chat_id]['user_id'] == user_id:
             last_user[chat_id]['count'] += 1
