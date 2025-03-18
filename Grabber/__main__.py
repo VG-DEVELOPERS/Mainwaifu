@@ -42,7 +42,7 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
     async with lock:
         # Fetch or set message frequency
         chat_settings = await user_totals_collection.find_one({'chat_id': chat_id})
-        message_frequency = chat_settings.get('message_frequency', 5) if chat_settings else 5
+        message_frequency = chat_settings.get('message_frequency', 1) if chat_settings else 1
 
         # Anti-Spam: Prevent same user from spamming
         if chat_id in last_user and last_user[chat_id]['user_id'] == user_id:
