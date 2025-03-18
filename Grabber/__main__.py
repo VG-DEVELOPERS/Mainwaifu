@@ -8,14 +8,14 @@ from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
-from grabber import (collection, top_global_groups_collection, group_user_totals_collection,
+from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
                      user_collection, user_totals_collection, Grabberu)
-from grabber import application, LOGGER
-from grabber.modules import ALL_MODULES
+from Grabber import application, LOGGER
+from Grabber.modules import ALL_MODULES
 
 # Load all modules
 for module_name in ALL_MODULES:
-    importlib.import_module("grabber.modules." + module_name)
+    importlib.import_module("Grabber.modules." + module_name)
 
 # Data tracking
 locks = {}
