@@ -24,6 +24,7 @@ sent_characters = {}
 first_correct_guesses = {}
 warned_users = {}
 last_user = {}
+rarity_spawn_index = {}
 
 # Character spawn frequency mapping
 rarity_map = {
@@ -36,15 +37,15 @@ rarity_map = {
     7: "🔮 Limited Edition"
 }
 
-rarity_spawn_counts = {
-    "⚪ Common": 5, 
-    "🟢 Medium": 3, 
-    "🟠 Rare": 2, 
-    "🟡 Legendary": 1, 
-    "💠 Cosmic": 2, 
-    "💮 Exclusive": 1, 
-    "🔮 Limited Edition": 1
-}
+rarity_spawn_counts = [
+    ("⚪ Common", 5), 
+    ("🟢 Medium", 3), 
+    ("🟠 Rare", 2), 
+    ("🟡 Legendary", 1), 
+    ("💠 Cosmic", 2), 
+    ("💮 Exclusive", 1), 
+    ("🔮 Limited Edition", 1)
+]
 
 async def message_counter(update: Update, context: CallbackContext) -> None:
     """Tracks messages and triggers character spawns."""
@@ -79,16 +80,17 @@ async def send_character(update: Update, context: CallbackContext) -> None:
     """Sends a character image based on rarity spawn frequency."""
     chat_id = update.effective_chat.id
 
-    if chat_id not in sent_characters:
-        sent_characters[chat_id] = {}
+    if chat_id not in rarity_spawn_index:
+        rarity_spawn_index[chat_id] = 0
 
-    for rarity, count in rarity_spawn_counts.items():
-        sent_characters[chat_id][rarity] = sent_characters[chat_id].get(rarity, 0) + 1
-        if sent_characters[chat_id][rarity] >= count:
-            sent_characters[chat_id][rarity] = 0
-            break
-    else:
-        rarity = "⚪ Common"
+    rarity, count = rarity_spawn_counts[rarity_spawn_index[chat_id]]
+
+    sent_characters[chat_id] = sent_characters.get(chat_id, {})
+    sent_characters[chat_id][rarity] = sent_characters[chat_id].get(rarity, 0) + 1
+
+    if sent_characters[chat_id][rarity] >= count:
+        sent_characters[chat_id][rarity] = 0
+        rarity_spawn_index[chat_id] = (rarity_spawn_index[chat_id] + 1) % len(rarity_spawn_counts)
 
     available_characters = await collection.find({'rarity': rarity}).to_list(length=None)
     
@@ -188,9 +190,8 @@ application.add_handler(CommandHandler("fav", fav, block=False))
 application.add_handler(CommandHandler("setfrequency", set_frequency, block=False))
 application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
 
-# Start bot
 if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
     application.run_polling(drop_pending_updates=True)
-            
+              
