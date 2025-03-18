@@ -11,7 +11,7 @@ from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filter
 from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
                      user_collection, user_totals_collection, db, LOGGER)
 from Grabber import application, SUPPORT_CHAT, UPDATE_CHAT
-from Grabber import ALL_MODULES
+from Grabber.modules import ALL_MODULES
 
 locks = {}
 message_counts = {}
