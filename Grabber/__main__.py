@@ -9,7 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
 from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
-                     user_collection, user_totals_collection, Grabberu)
+                     user_totals_collection, Grabberu)
 from Grabber import application, LOGGER
 from Grabber.modules import ALL_MODULES
 
@@ -20,7 +20,7 @@ for module_name in ALL_MODULES:
 # Data tracking
 locks = {}
 message_counts = {}
-last_characters = {}  # Stores the last spawned character for each chat
+last_characters = {}  
 first_correct_guesses = {}
 total_seals = {}
 
@@ -44,136 +44,120 @@ rarity_spawn_counts = [
 ]
 
 # Special Rarity Message Thresholds
-cosmic_threshold = 5000
-exclusive_threshold = 10000
-limited_edition_threshold = 15000
-seal_limit = 50
+special_rarity_thresholds = {
+    "💠 Cosmic": 5000,
+    "💮 Exclusive": 10000,
+    "🔮 Limited Edition": 15000
+}
 
-def escape_markdown(text):
-    escape_chars = r'\*_`\\~>#+-=|{}.!'
-    return re.sub(r'([%s])' % re.escape(escape_chars), r'\\\1', text)
+# Seal Limits
+seal_limits = {
+    "💠 Cosmic": 200,
+    "💮 Exclusive": 100,
+    "🔮 Limited Edition": 50
+}
 
-# Track Messages and Trigger Character Spawns
+# Track seals per rarity
+sealed_characters = {rarity: 0 for rarity in seal_limits}
+
 async def message_counter(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
-
+    
     if chat_id not in locks:
         locks[chat_id] = asyncio.Lock()
-    
     lock = locks[chat_id]
 
     async with lock:
         chat_data = await user_totals_collection.find_one({'chat_id': chat_id})
         message_frequency = chat_data.get('message_frequency', 100) if chat_data else 100
-
+        
         message_counts[chat_id] = message_counts.get(chat_id, 0) + 1
-
+        
         if message_counts[chat_id] % message_frequency == 0:
-            await spawn_character(update, context)
+            await send_character(update, context)
             message_counts[chat_id] = 0
 
-# Spawn a Character
-async def spawn_character(update: Update, context: CallbackContext) -> None:
-    chat_id = str(update.effective_chat.id)
+async def send_character(update: Update, context: CallbackContext) -> None:
+    chat_id = update.effective_chat.id
 
-    chat_data = await user_totals_collection.find_one({'chat_id': chat_id})
-    total_messages = chat_data.get('total_messages', 0) if chat_data else 0
-
-    # Determine rarity based on message count
-    if total_messages >= limited_edition_threshold:
-        rarity = "🔮 Limited Edition"
-    elif total_messages >= exclusive_threshold:
-        rarity = "💮 Exclusive"
-    elif total_messages >= cosmic_threshold:
-        rarity = "💠 Cosmic"
-    else:
-        rarity = random.choices(
-            [r[0] for r in rarity_spawn_counts],
-            [r[1] for r in rarity_spawn_counts]
-        )[0]
-
-    # Fetch a unique character from the database
-    character = await collection.find_one({'rarity': rarity})
-
-    if not character:
-        await update.message.reply_text(f"⚠️ No available characters for rarity {rarity}.")
+    all_characters = list(await collection.find({}).to_list(length=None))
+    
+    if not all_characters:
         return
 
-    last_characters[chat_id] = character  # Store the spawned character
+    if chat_id not in last_characters:
+        last_characters[chat_id] = []
+
+    available_characters = [c for c in all_characters if c['id'] not in last_characters[chat_id]]
+    
+    if not available_characters:
+        last_characters[chat_id] = []
+        available_characters = all_characters
+
+    character = random.choice(available_characters)
+    last_characters[chat_id].append(character['id'])
 
     await context.bot.send_photo(
         chat_id=chat_id,
         photo=character['img_url'],
-        caption=f"A {rarity} character appeared! Use /guess <name> to capture.",
+        caption=f"""A New {character['rarity']} Character Appeared...\n/seal Character Name to capture!""",
         parse_mode='Markdown'
     )
 
-# Capture (Seal) Character
-async def guess(update: Update, context: CallbackContext) -> None:
-    chat_id = str(update.effective_chat.id)
+async def seal(update: Update, context: CallbackContext) -> None:
+    chat_id = update.effective_chat.id
     user_id = update.effective_user.id
 
     if chat_id not in last_characters:
         await update.message.reply_text("❌ No character available to capture. Wait for the next spawn.")
         return
 
-    character = last_characters[chat_id]  # Retrieve last spawned character
-    guess_name = ' '.join(context.args).lower() if context.args else ''
-    correct_name = character['name'].lower()
+    guess = ' '.join(context.args).lower() if context.args else ''
+    character = next((c for c in await collection.find({'id': {'$in': last_characters[chat_id]}}).to_list(length=None)
+                      if sorted(c['name'].lower().split()) == sorted(guess.split())), None)
 
-    if guess_name == correct_name:
-        user = await user_collection.find_one({'id': user_id})
-
-        if user:
-            await user_collection.update_one({'id': user_id}, {'$push': {'characters': character}})
-        else:
-            await user_collection.insert_one({'id': user_id, 'characters': [character]})
-
-        total_seals[chat_id] = total_seals.get(chat_id, 0) + 1
-        if total_seals[chat_id] >= seal_limit:
-            await update.message.reply_text("⚠️ Seal limit reached for this chat!")
-            return
-
-        await update.message.reply_text(f"✅ {character['name']} has been added to your collection!")
-
-        del last_characters[chat_id]  # Remove character after it's sealed
-
-    else:
+    if not character:
         await update.message.reply_text("❌ Incorrect name! Try again.")
+        return
 
-# Mark Favorite Character
-async def fav(update: Update, context: CallbackContext) -> None:
+    last_characters[chat_id].remove(character['id'])
+
+    rarity = character['rarity']
+    if rarity in sealed_characters and sealed_characters[rarity] >= seal_limits[rarity]:
+        await update.message.reply_text(f"⚠️ Seal limit reached for {rarity}! Cannot capture more.")
+        return
+
+    sealed_characters[rarity] += 1
+    await collection.update_one({'id': character['id']}, {'$set': {'sealed_by': user_id}})
+
+    keyboard = [[InlineKeyboardButton(f"View Collection", switch_inline_query_current_chat=f"collection.{user_id}")]]
+    await update.message.reply_text(
+        f"✅ <b>{escape(update.effective_user.first_name)}</b> captured <b>{character['name']}</b> from <b>{character['anime']}</b>!\n\n📜 Rarity: {rarity}",
+        parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def find_limited(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
 
-    if not context.args:
-        await update.message.reply_text("⚠️ Usage: /fav <character_id>")
+    limited_characters = await collection.find({'sealed_by': user_id, 'rarity': '🔮 Limited Edition'}).to_list(length=None)
+
+    if not limited_characters:
+        await update.message.reply_text("You have no 🔮 Limited Edition characters in your collection.")
         return
 
-    character_id = context.args[0]
-    user_data = await user_collection.find_one({'id': user_id})
+    character_list = '\n'.join([f"- {c['name']} ({c['anime']})" for c in limited_characters])
+    await update.message.reply_text(f"🔮 **Limited Edition Characters:**\n\n{character_list}", parse_mode='Markdown')
 
-    if not user_data or 'characters' not in user_data:
-        await update.message.reply_text("❌ You have no characters to favorite.")
-        return
+def main() -> None:
+    """Run bot."""
+    application.add_handler(CommandHandler("seal", seal, block=False))
+    application.add_handler(CommandHandler("find", find_limited, block=False))
+    application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
 
-    matched_character = next((char for char in user_data['characters'] if char['id'] == character_id), None)
+    application.run_polling(drop_pending_updates=True)
 
-    if not matched_character:
-        await update.message.reply_text("❌ Character not found in your collection.")
-        return
-
-    await user_collection.update_one({'id': user_id, 'characters.id': character_id}, {'$set': {'characters.$.fav': True}})
-
-    await update.message.reply_text(f"⭐ {matched_character['name']} has been marked as your favorite!")
-
-# Register Handlers
-application.add_handler(CommandHandler(["guess", "seal"], guess, block=False))
-application.add_handler(CommandHandler("fav", fav, block=False))
-application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
-
-# Start Bot
 if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
-    application.run_polling(drop_pending_updates=True)
+    main()
   
