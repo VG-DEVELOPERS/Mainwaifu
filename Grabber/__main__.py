@@ -21,7 +21,32 @@ first_correct_guesses = {}
 last_grab = {}
 waifu_message = {}
 sealed_characters = {}
+# Rarity Mapping
+rarity_map = {
+    1: "⚪ Common", 
+    2: "🟢 Medium", 
+    3: "🟠 Rare", 
+    4: "🟡 Legendary", 
+    5: "💠 Cosmic", 
+    6: "💮 Exclusive", 
+    7: "🔮 Limited Edition"
+}
 
+# Spawn Rates
+rarity_spawn_counts = [
+    ("⚪ Common", 5), 
+    ("🟢 Medium", 3), 
+    ("🟠 Rare", 2), 
+    ("🟡 Legendary", 1)
+]
+
+# Special Rarity Message Thresholds
+special_rarity_thresholds = {
+    "💠 Cosmic": 5000,
+    "💮 Exclusive": 10000,
+    "🔮 Limited Edition": 15000
+}
+  
 seal_limits = {
     "💠 Cosmic": 200,
     "💮 Exclusive": 100,
@@ -69,29 +94,65 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
             await send_image(update, context)
             message_counts[chat_id] = 0
 
+# Track spawn sequence and message count per chat
+waifu_spawn_order = {}
+message_count_per_chat = {}
+
 async def send_image(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
 
+    # Retrieve all characters
     all_characters = list(await collection.find({}).to_list(length=None))
 
-    if chat_id not in sent_characters:
-        sent_characters[chat_id] = []
+    # Initialize tracking for the chat if not present
+    if chat_id not in waifu_spawn_order:
+        waifu_spawn_order[chat_id] = 0  # Track spawn index
+    if chat_id not in message_count_per_chat:
+        message_count_per_chat[chat_id] = 0  # Track total messages
 
-    available_characters = [c for c in all_characters if c['id'] not in sent_characters[chat_id]]
-    if not available_characters:
-        sent_characters[chat_id] = []
-        available_characters = all_characters
+    # Increment message count
+    message_count_per_chat[chat_id] += 1
 
-    character = random.choice(available_characters)
-    sent_characters[chat_id].append(character['id'])
+    # Check if a special rarity character should appear
+    for rarity, threshold in special_rarity_thresholds.items():
+        if message_count_per_chat[chat_id] % threshold == 0:
+            available_characters = [c for c in all_characters if c['rarity'] == rarity]
+            if available_characters:
+                character = random.choice(available_characters)
+                break
+    else:
+        # Normal rarity cycle (Common → Medium → Rare → Legendary → Repeat)
+        rarity_cycle = []
+        for rarity, count in rarity_spawn_counts:
+            rarity_cycle.extend([rarity] * count)
+
+        # Determine current rarity based on cycle
+        current_rarity_index = waifu_spawn_order[chat_id] % len(rarity_cycle)
+        required_rarity = rarity_cycle[current_rarity_index]
+
+        # Filter available characters for the required rarity
+        available_characters = [c for c in all_characters if c['rarity'] == required_rarity]
+
+        if not available_characters:
+            available_characters = all_characters  # Fallback to any character
+
+        character = random.choice(available_characters)
+
+    # Store the character as the latest spawn
     last_characters[chat_id] = character
 
+    # Send waifu image and info
     waifu_message[chat_id] = await context.bot.send_photo(
         chat_id=chat_id,
         photo=character['img_url'],
         caption=f"""A New {character['rarity']} Character Appeared...\n/guess Character Name and add in Your Harem""",
         parse_mode='Markdown'
     )
+
+    # Move to the next rarity in sequence
+    waifu_spawn_order[chat_id] += 1
+  
+
 
 async def guess(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
