@@ -9,7 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
 from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
-                     user_collection, user_totals_collection, db, LOGGER)
+                     user_collection, user_totals_collection, db, LOGGER, Grabberu)
 from Grabber import application, SUPPORT_CHAT, UPDATE_CHAT
 from Grabber.modules import ALL_MODULES
 
