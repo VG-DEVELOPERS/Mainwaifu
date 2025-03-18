@@ -1,14 +1,10 @@
 import importlib
-import time
 import random
 import asyncio
-import re
-from html import escape
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
-from Grabber import collection, user_totals_collection, user_collection, top_global_groups_collection, group_user_totals_collection, Grabberu
+from Grabber import collection, user_totals_collection, user_collection, Grabberu
 from Grabber import application, LOGGER
 from Grabber.modules import ALL_MODULES
 
@@ -17,13 +13,7 @@ for module_name in ALL_MODULES:
     importlib.import_module("Grabber.modules." + module_name)
 
 # Bot tracking data
-locks = {}
-message_counts = {}
 last_characters = {}
-sent_characters = {}
-first_correct_guesses = {}
-warned_users = {}
-last_user = {}
 total_seals = {}
 
 # Rarity mapping
@@ -37,7 +27,7 @@ rarity_map = {
     7: "🔮 Limited Edition"
 }
 
-# Spawn frequency mapping (only for normal spawn)
+# Normal spawn rates
 rarity_spawn_counts = [
     ("⚪ Common", 5), 
     ("🟢 Medium", 3), 
@@ -45,13 +35,98 @@ rarity_spawn_counts = [
     ("🟡 Legendary", 1)
 ]
 
-# Message thresholds for special rarity spawns
+# Special rarity spawn thresholds
 cosmic_threshold = 5000
 exclusive_threshold = 10000
 limited_edition_threshold = 15000
 seal_limit = 50
+
+# Seal counts required for Cosmic and Exclusive
 cosmic_seal_required = 200
 exclusive_seal_required = 100
+
+# Function to spawn a character
+async def spawn_character(update: Update, context: CallbackContext) -> None:
+    chat_id = str(update.effective_chat.id)
+
+    # Get chat total messages
+    chat_data = await user_totals_collection.find_one({'chat_id': chat_id})
+    total_messages = chat_data.get('total_messages', 0) if chat_data else 0
+
+    # Determine rarity based on message count
+    if total_messages >= limited_edition_threshold:
+        rarity = "🔮 Limited Edition"
+    elif total_messages >= exclusive_threshold:
+        rarity = "💮 Exclusive"
+    elif total_messages >= cosmic_threshold:
+        rarity = "💠 Cosmic"
+    else:
+        rarity = random.choices(
+            [r[0] for r in rarity_spawn_counts],
+            [r[1] for r in rarity_spawn_counts]
+        )[0]
+
+    # Fetch a unique character for this rarity
+    existing_characters = [char['id'] for char in last_characters.values()]
+    character = await collection.find_one({'rarity': rarity, 'id': {'$nin': existing_characters}})
+
+    if not character:
+        await update.message.reply_text(f"⚠️ No new characters available for rarity {rarity}.")
+        return
+
+    # Store last spawned character
+    last_characters[chat_id] = character
+
+    await context.bot.send_photo(
+        chat_id=chat_id,
+        photo=character['img_url'],
+        caption=f"A {rarity} character appeared!\nUse /seal <name> to capture.",
+        parse_mode='Markdown'
+    )
+
+# Function to seal (capture) character
+async def seal(update: Update, context: CallbackContext) -> None:
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+
+    # No character to seal
+    if chat_id not in last_characters:
+        await update.message.reply_text("❌ No character to seal! Wait for the next spawn.")
+        return
+
+    guess = ' '.join(context.args).lower() if context.args else ''
+    character = last_characters[chat_id]
+    correct_name = character['name'].lower()
+
+    # Correct guess
+    if correct_name == guess:
+        # Check if user already owns the character
+        user = await user_collection.find_one({'id': user_id})
+        if user and any(char['id'] == character['id'] for char in user.get('characters', [])):
+            await update.message.reply_text("❌ You already own this character!")
+            return
+
+        # Store the sealed character
+        if user:
+            await user_collection.update_one({'id': user_id}, {'$push': {'characters': character}})
+        else:
+            await user_collection.insert_one({'id': user_id, 'characters': [character]})
+
+        # Increase total seals in chat
+        total_seals[chat_id] = total_seals.get(chat_id, 0) + 1
+
+        # Stop spawning if seal limit is reached
+        if total_seals[chat_id] >= seal_limit:
+            await update.message.reply_text("⚠️ Seal limit reached for this chat!")
+            return
+
+        await update.message.reply_text(f"✅ {character['name']} has been sealed and added to your collection!")
+        
+        # Remove character from spawn list
+        del last_characters[chat_id]
+
+    else:
+        await update.message.reply_text("❌ Incorrect name! Try again.")
 
 # Function to mark favorite character by ID
 async def fav(update: Update, context: CallbackContext) -> None:
@@ -82,90 +157,7 @@ async def fav(update: Update, context: CallbackContext) -> None:
 
     await update.message.reply_text(f"⭐ {matched_character['name']} has been marked as your favorite!")
 
-# Function to spawn characters based on frequency
-async def spawn_character(update: Update, context: CallbackContext) -> None:
-    chat_id = str(update.effective_chat.id)
-
-    # Fetch total messages for the chat
-    chat_data = await user_totals_collection.find_one({'chat_id': chat_id})
-    total_messages = chat_data.get('total_messages', 0) if chat_data else 0
-
-    # Determine rarity based on message count
-    if total_messages >= limited_edition_threshold:
-        rarity = "🔮 Limited Edition"
-    elif total_messages >= exclusive_threshold:
-        rarity = "💮 Exclusive"
-    elif total_messages >= cosmic_threshold:
-        rarity = "💠 Cosmic"
-    else:
-        rarity = random.choices(
-            [r[0] for r in rarity_spawn_counts],
-            [r[1] for r in rarity_spawn_counts]
-        )[0]
-
-    # Fetch character from database
-    character = await collection.find_one({'rarity': rarity})
-
-    if not character:
-        await update.message.reply_text(f"⚠️ No characters available for rarity {rarity}.")
-        return
-
-    # Store last character for guess check
-    last_characters[chat_id] = character
-    sent_characters[chat_id] = character['id']
-
-    await context.bot.send_photo(
-        chat_id=chat_id,
-        photo=character['img_url'],
-        caption=f"A new {character['rarity']} character appeared!\nUse /seal <name> to collect.",
-        parse_mode='Markdown'
-    )
-
-# Function to seal (capture) character
-async def seal(update: Update, context: CallbackContext) -> None:
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-
-    if chat_id not in last_characters:
-        return
-
-    if chat_id in first_correct_guesses:
-        await update.message.reply_text("❌ Already sealed by someone! Try next time.")
-        return
-
-    guess = ' '.join(context.args).lower() if context.args else ''
-    correct_name = last_characters[chat_id]['name'].lower()
-
-    if correct_name == guess:
-        first_correct_guesses[chat_id] = user_id
-
-        # Store user details
-        user = await user_collection.find_one({'id': user_id})
-        if user:
-            await user_collection.update_one(
-                {'id': user_id}, 
-                {'$push': {'characters': last_characters[chat_id]}}
-            )
-        else:
-            await user_collection.insert_one({
-                'id': user_id,
-                'characters': [last_characters[chat_id]],
-            })
-
-        # Increase chat total seals
-        total_seals[chat_id] = total_seals.get(chat_id, 0) + 1
-
-        # Stop spawning if seal limit is reached
-        if total_seals[chat_id] >= seal_limit:
-            await update.message.reply_text("⚠️ Seal limit reached for this chat!")
-            return
-
-        await update.message.reply_text(f"✅ {last_characters[chat_id]['name']} has been sealed and added to your collection!")
-
-    else:
-        await update.message.reply_text("❌ Incorrect name! Try again.")
-
-# Function to set custom frequency
+# Function to set custom spawn frequency
 async def set_frequency(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     chat_id = str(update.effective_chat.id)
@@ -203,3 +195,4 @@ if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
     application.run_polling(drop_pending_updates=True)
+    
