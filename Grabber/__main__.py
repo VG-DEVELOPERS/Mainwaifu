@@ -8,14 +8,14 @@ from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
-from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
-                   user_collection, user_totals_collection, Grabberu)
-from Grabber import application, LOGGER
-from Grabber.modules import ALL_MODULES
+from grabber import (collection, top_global_groups_collection, group_user_totals_collection,
+                     user_collection, user_totals_collection, Grabberu)
+from grabber import application, LOGGER
+from grabber.modules import ALL_MODULES
 
 # Load all modules
 for module_name in ALL_MODULES:
-    importlib.import_module("shivu.modules." + module_name)
+    importlib.import_module("grabber.modules." + module_name)
 
 # Data tracking
 locks = {}
@@ -198,7 +198,7 @@ application.add_handler(MessageHandler(filters.ALL, message_counter, block=False
 
 # Start Bot
 if __name__ == "__main__":
-    shivuu.start()
+    Grabberu.start()
     LOGGER.info("Bot started")
     application.run_polling(drop_pending_updates=True)
-    
+                                  
