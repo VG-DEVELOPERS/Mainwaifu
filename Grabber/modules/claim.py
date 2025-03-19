@@ -6,7 +6,9 @@ from pyrogram.errors import UserNotParticipant, PeerIdInvalid
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from Grabber import application, user_collection, collection
 from Grabber import Grabberu as app
-from Grabber import SUPPORT_CHAT, BOT_USERNAME, photo_url
+from Grabber import SUPPORT_CHAT, BOT_USERNAME
+
+photo_url = "https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg"  # Your photo URL
 
 # Constants
 ALLOWED_GROUP_ID = -1002528887253  # Your group ID where claiming is allowed
