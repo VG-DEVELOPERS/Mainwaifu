@@ -92,7 +92,6 @@ async def ctop(update: Update, context: CallbackContext) -> None:
 
     await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
 
-
 async def leaderboard(update: Update, context: CallbackContext) -> None:
     cursor = user_collection.aggregate([
         {"$project": {"user_id": 1, "first_name": 1, "character_count": {"$size": "$characters"}}},
@@ -107,15 +106,19 @@ async def leaderboard(update: Update, context: CallbackContext) -> None:
         user_id = user.get('user_id')
         first_name = html.escape(user.get('first_name', 'Unknown'))
 
-        if len(first_name) > 15:  # Shorten long names
+        if not user_id:
+            user_id = 0  # Default if user_id is missing (prevents None issue)
+
+        if len(first_name) > 15:
             first_name = first_name[:15] + '...'
-        
+
         character_count = user['character_count']
         leaderboard_message += f'{i}. <a href="tg://user?id={user_id}"><b>{first_name}</b></a> ➾ <b>{character_count}</b>\n'
-    
-    photo_url = "https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg"  # Your leaderboard image
+
+    photo_url = "https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg"
 
     await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
+  
 async def broadcast(update: Update, context: CallbackContext) -> None:
     OWNER_ID = '7717913705'  # Set the OWNER_ID directly within the function
 
