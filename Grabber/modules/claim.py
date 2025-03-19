@@ -1,4 +1,5 @@
 import random
+from telegram import Update
 import html
 from datetime import datetime
 from pyrogram import Client, filters
@@ -7,7 +8,6 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from Grabber import application, user_collection, collection
 from Grabber import Grabberu as app
 from Grabber import SUPPORT_CHAT, BOT_USERNAME
-from telegram import Update
 
 photo_url = "https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg"  # Your photo URL
 
