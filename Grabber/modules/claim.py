@@ -1,4 +1,5 @@
 import random
+import html
 from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.errors import UserNotParticipant, PeerIdInvalid
