@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.errors import UserNotParticipant, PeerIdInvalid
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -8,8 +8,8 @@ from Grabber import Grabberu as app
 from Grabber import SUPPORT_CHAT, BOT_USERNAME
 
 # Constants
-ALLOWED_GROUP_ID = -1002528887253
-MUST_JOIN = "seal_Your_WH_Group"  # Main group username
+ALLOWED_GROUP_ID = -1002528887253  # Your group ID where claiming is allowed
+MUST_JOIN = "seal_Your_WH_Group"  # Main required group username
 SECOND_JOIN = "seal_Your_WH_Group"  # Second required channel
 
 # Rarity list with weighted probability
@@ -86,10 +86,14 @@ async def claim_waifu(client: Client, message: Message):
 
     waifu = waifus[0]
 
-    # Update user's database entry to mark waifu as claimed
+    # Update user's database entry to mark waifu as claimed and increment their waifu count
     await user_collection.update_one(
         {'id': user_id},
-        {'$set': {'claimed_waifu': True}, '$push': {'characters': waifu}},
+        {
+            '$set': {'claimed_waifu': True, 'first_name': first_name},
+            '$push': {'characters': waifu},
+            '$inc': {'waifu_count': 1}  # Increase the waifu count
+        },
         upsert=True
     )
 
@@ -115,6 +119,25 @@ async def claim_waifu(client: Client, message: Message):
     else:
         await message.reply_text(caption)  
 
+@app.on_message(filters.command("topwaifus") & filters.group)
+async def top_waifus(client: Client, message: Message):
+    """Shows the top 10 users with the most waifus."""
+    top_users = await user_collection.find({}, projection={'id': 1, 'first_name': 1, 'waifu_count': 1}).sort('waifu_count', -1).limit(10).to_list(10)
+
+    if not top_users:
+        return await message.reply_text("⚠️ No users have claimed waifus yet.")
+
+    leaderboard_message = "🏆 **Top 10 Users with Most Waifus:**\n\n"
+    
+    for i, user in enumerate(top_users, start=1):
+        first_name = user.get('first_name', 'Unknown')
+        user_id = user.get('id', 'Unknown')
+        waifu_count = user.get('waifu_count', 0)
+
+        leaderboard_message += f"{i}. [{first_name}](tg://user?id={user_id}) ➾ {waifu_count} waifus\n"
+
+    await message.reply_text(leaderboard_message, parse_mode="Markdown")
+
 @app.on_message(filters.command("waifu_help") & filters.private)
 async def waifu_help(client: Client, message: Message):
     """Displays help information for claiming a waifu."""
@@ -122,6 +145,7 @@ async def waifu_help(client: Client, message: Message):
         "👋 **Welcome to the Waifu Claim Bot!**\n\n"
         "**Commands:**\n"
         "/claim - Claim a random waifu (only in the allowed group, one-time only)\n"
+        "/top_waifus - See the top 10 users with the most waifus\n"
         "/waifu_help - Show this help message\n\n"
         "**Instructions:**\n"
         f"1. Make sure you have joined both @{SUPPORT_CHAT} and @{MUST_JOIN}.\n"
@@ -134,4 +158,4 @@ async def waifu_help(client: Client, message: Message):
         "Good luck and happy claiming!"
     )
     await message.reply_text(help_text)
-                                  
+    
