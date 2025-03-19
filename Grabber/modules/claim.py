@@ -10,8 +10,7 @@ from Grabber import Grabberu as app
 from Grabber import SUPPORT_CHAT, BOT_USERNAME
 
 photo_url = "https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg"  # Your photo URL
-Update = update
-# Constants
+
 ALLOWED_GROUP_ID = -1002528887253  # Your group ID where claiming is allowed
 MUST_JOIN = "seal_Your_WH_Group"  # Main required group username
 SECOND_JOIN = "seal_Your_WH_Group"  # Second required channel
