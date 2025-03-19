@@ -36,7 +36,7 @@ async def start(update: Update, context: CallbackContext) -> None:
         caption = """
         ***Heyyyy...***
 
-***I am An Open Source Character Catcher Bot...​Add Me in Your group.. And I will send Random Characters After every 100 messages in the Group... Use /guess to Collect those Characters in Your Collection... and see your Collection by using /Harem... So add me to your groups and start collecting your harem!***
+***I am An Open Source Character Catcher Bot...​Add Me in Your group.. And I will send Random Characters After every 100 messages in the Group... Use /seal to Collect those Characters in Your Collection... and see your Collection by using /Harem... So add me to your groups and start collecting your harem!***
         """
         keyboard = [
             [InlineKeyboardButton("ᴀᴅᴅ ᴍᴇ", url=f'http://t.me/{BOT_USERNAME}?startgroup=new')],
