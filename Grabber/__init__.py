@@ -35,7 +35,7 @@ Grabberu = Client("Grabber", api_id, api_hash, bot_token=TOKEN)
 client = AsyncIOMotorClient(mongo_url)
 db = client['Character_catchers']
 collection = db['anime_characterss']
-user_totals_collection = db['user_totalss']
-user_collection = db["user_collections"]
+user_totals_collection = db['user_totalsss']
+user_collection = db["user_collectionss"]
 group_user_totals_collection = db['group_user_totals']
 top_global_groups_collection = db['top_global_groupss']
