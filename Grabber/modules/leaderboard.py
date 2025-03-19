@@ -92,31 +92,30 @@ async def ctop(update: Update, context: CallbackContext) -> None:
 
     await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
 
+
 async def leaderboard(update: Update, context: CallbackContext) -> None:
-    
     cursor = user_collection.aggregate([
-        {"$project": {"username": 1, "first_name": 1, "character_count": {"$size": "$characters"}}},
+        {"$project": {"user_id": 1, "first_name": 1, "character_count": {"$size": "$characters"}}},
         {"$sort": {"character_count": -1}},
         {"$limit": 10}
     ])
     leaderboard_data = await cursor.to_list(length=10)
 
-    leaderboard_message = "<b>TOP 10 USERS WITH MOST CHARACTERS</b>\n\n"
+    leaderboard_message = "<b>🏆 TOP 10 USERS WITH MOST CHARACTERS 🏆</b>\n\n"
 
     for i, user in enumerate(leaderboard_data, start=1):
-        username = user.get('username', 'Unknown')
+        user_id = user.get('user_id')
         first_name = html.escape(user.get('first_name', 'Unknown'))
 
-        if len(first_name) > 10:
+        if len(first_name) > 15:  # Shorten long names
             first_name = first_name[:15] + '...'
+        
         character_count = user['character_count']
-        leaderboard_message += f'{i}. <a href="https://t.me/{username}"><b>{first_name}</b></a> ➾ <b>{character_count}</b>\n'
+        leaderboard_message += f'{i}. <a href="tg://user?id={user_id}"><b>{first_name}</b></a> ➾ <b>{character_count}</b>\n'
     
-    photo_url = "https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg"  # Your photo URL
+    photo_url = "https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg"  # Your leaderboard image
 
     await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
-
-
 async def broadcast(update: Update, context: CallbackContext) -> None:
     OWNER_ID = '7717913705'  # Set the OWNER_ID directly within the function
 
