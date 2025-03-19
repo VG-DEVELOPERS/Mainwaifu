@@ -119,24 +119,35 @@ async def claim_waifu(client: Client, message: Message):
     else:
         await message.reply_text(caption)  
 
-@app.on_message(filters.command("topwaifus") & filters.group)
+@app.on_message(filters.command("tops") & filters.group)
 async def top_waifus(client: Client, message: Message):
-    """Shows the top 10 users with the most waifus."""
-    top_users = await user_collection.find({}, projection={'id': 1, 'first_name': 1, 'waifu_count': 1}).sort('waifu_count', -1).limit(10).to_list(10)
+    """Shows the top 10 users with the most claimed waifus."""
+    
+    top_users = await user_collection.find(
+        {}, 
+        projection={'id': 1, 'first_name': 1, 'waifu_count': 1}
+    ).sort('waifu_count', -1).limit(10).to_list(10)
 
     if not top_users:
         return await message.reply_text("⚠️ No users have claimed waifus yet.")
 
     leaderboard_message = "🏆 **Top 10 Users with Most Waifus:**\n\n"
-    
+
     for i, user in enumerate(top_users, start=1):
         first_name = user.get('first_name', 'Unknown')
         user_id = user.get('id', 'Unknown')
         waifu_count = user.get('waifu_count', 0)
 
-        leaderboard_message += f"{i}. [{first_name}](tg://user?id={user_id}) ➾ {waifu_count} waifus\n"
+        # Ensure user_id is an integer before making a clickable link
+        if isinstance(user_id, int):
+            profile_link = f"[{first_name}](tg://user?id={user_id})"
+        else:
+            profile_link = first_name  # If no valid ID, just show the name
 
-    await message.reply_text(leaderboard_message, parse_mode="Markdown")
+        leaderboard_message += f"{i}. {profile_link} ➾ {waifu_count} waifus\n"
+
+    await message.reply_text(leaderboard_message, parse_mode="html")
+
 
 @app.on_message(filters.command("waifu_help") & filters.private)
 async def waifu_help(client: Client, message: Message):
