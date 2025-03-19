@@ -6,7 +6,7 @@ from pyrogram.errors import UserNotParticipant, PeerIdInvalid
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from Grabber import application, user_collection, collection
 from Grabber import Grabberu as app
-from Grabber import SUPPORT_CHAT, BOT_USERNAME
+from Grabber import SUPPORT_CHAT, BOT_USERNAME, photo_url
 
 # Constants
 ALLOWED_GROUP_ID = -1002528887253  # Your group ID where claiming is allowed
@@ -147,7 +147,7 @@ async def top_waifus(client: Client, message: Message):
 
         leaderboard_message += f"{i}. {profile_link} ➾ {waifu_count} waifus\n"
 
-    await message.reply_text(leaderboard_message, parse_mode="HTML")
+    await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
 
 
 @app.on_message(filters.command("waifu_help") & filters.private)
