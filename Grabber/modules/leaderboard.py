@@ -193,6 +193,35 @@ async def stats(update: Update, context: CallbackContext) -> None:
 
     await update.message.reply_text(f'Total Users: {user_count}\nTotal Groups: {group_count}')
 
+@app.on_message(filters.command("topss") & filters.group)
+async def top_waifus(client: Client, message: Message):
+    """Shows the top 10 users with the most claimed waifus."""
+    
+    top_users = await user_collection.find(
+        {}, 
+        projection={'id': 1, 'first_name': 1, 'waifu_count': 1}
+    ).sort('waifu_count', -1).limit(10).to_list(10)
+
+    if not top_users:
+        return await message.reply_text("⚠️ No users have claimed waifus yet.")
+
+    leaderboard_message = "🏆 **Top 10 Users with Most Waifus:**\n\n"
+
+    for i, user in enumerate(top_users, start=1):
+        first_name = user.get('first_name', 'Unknown')
+        user_id = user.get('id', 'Unknown')
+        waifu_count = user.get('waifu_count', 0)
+
+        # Ensure user_id is an integer before making a clickable link
+        if isinstance(user_id, int):
+            profile_link = f"[{first_name}](tg://user?id={user_id})"
+        else:
+            profile_link = first_name  # If no valid ID, just show the name
+
+        leaderboard_message += f"{i}. {profile_link} ➾ {waifu_count} waifus\n"
+
+    await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
+
 
 
 
