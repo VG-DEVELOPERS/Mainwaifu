@@ -7,7 +7,7 @@ from telegram.ext import CommandHandler, CallbackContext
 
 from Grabber import (application, PHOTO_URL, OWNER_ID,
                     user_collection, top_global_groups_collection, top_global_groups_collection, 
-                    group_user_totals_collection)
+                    group_user_totals_collection, Grabberu as app)
 
 from Grabber import sudo_users as SUDO_USERS 
 
