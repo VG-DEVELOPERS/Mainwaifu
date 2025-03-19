@@ -11,7 +11,6 @@ from Grabber import SUPPORT_CHAT, BOT_USERNAME
 ALLOWED_GROUP_ID = -1002528887253
 MUST_JOIN = "seal_Your_WH_Group"  # Main group username
 SECOND_JOIN = "seal_Your_WH_Group"  # Second required channel
-COOLDOWN_DURATION = timedelta(days=1)  # 24-hour cooldown
 
 # Rarity list with weighted probability
 RARITY_WEIGHTS = {
@@ -21,8 +20,8 @@ RARITY_WEIGHTS = {
     '🟡 Legendary': 1  # 1% chance
 }
 
-async def get_random_husbando():
-    """Fetch a random husbando from the database based on rarity probability."""
+async def get_random_waifu():
+    """Fetch a random waifu from the database based on rarity probability."""
     selected_rarity = random.choices(
         list(RARITY_WEIGHTS.keys()), 
         weights=list(RARITY_WEIGHTS.values()), 
@@ -38,12 +37,12 @@ async def get_random_husbando():
         waifus = await cursor.to_list(length=None)
         return waifus
     except Exception as e:
-        print(f"Error fetching random husbando: {e}")
+        print(f"Error fetching random waifu: {e}")
         return []
 
 @app.on_message(filters.command("claim") & filters.group)
-async def claim_husbando(client: Client, message: Message):
-    """Allows users to claim a husbando but only in the allowed group."""
+async def claim_waifu(client: Client, message: Message):
+    """Allows users to claim a waifu, but only once ever."""
     chat_id = message.chat.id
     user_id = message.from_user.id
     first_name = message.from_user.first_name
@@ -53,17 +52,10 @@ async def claim_husbando(client: Client, message: Message):
     if chat_id != ALLOWED_GROUP_ID:
         return await message.reply_text(f"This command is only available in @{BOT_USERNAME}.")
 
-    # Cooldown check
-    user_data = await user_collection.find_one({'id': user_id}, projection={'last_husbando_claim': 1})
-    if user_data and user_data.get('last_husbando_claim'):
-        last_claim = user_data['last_husbando_claim']
-        if datetime.utcnow() - last_claim < COOLDOWN_DURATION:
-            remaining_time = (COOLDOWN_DURATION - (datetime.utcnow() - last_claim)).total_seconds()
-            hours, remainder = divmod(remaining_time, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            return await message.reply_text(
-                f"⏳ You can claim your next husbando in {int(hours)}h {int(minutes)}m {int(seconds)}s."
-            )
+    # Check if the user has already claimed a waifu
+    user_data = await user_collection.find_one({'id': user_id}, projection={'claimed_waifu': 1})
+    if user_data and user_data.get('claimed_waifu', False):
+        return await message.reply_text("🎖️ **You have already claimed your waifu!**")
 
     # Check if the bot can access the required channels
     try:
@@ -80,31 +72,31 @@ async def claim_husbando(client: Client, message: Message):
         link1 = f"https://t.me/{MUST_JOIN}"
         link2 = f"https://t.me/{SECOND_JOIN}"
         return await message.reply_text(
-            "🔒 To claim a husbando, you must join both groups!",
+            "🔒 To claim a waifu, you must join both groups!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Join Group", url=link1)],
                 [InlineKeyboardButton("Join Channel", url=link2)]
             ])
         )
 
-    # Get a random husbando
-    waifus = await get_random_husbando()
+    # Get a random waifu
+    waifus = await get_random_waifu()
     if not waifus:
-        return await message.reply_text("⚠️ No husbandos available. Please try again later.")
+        return await message.reply_text("⚠️ No waifus available. Please try again later.")
 
     waifu = waifus[0]
 
-    # Update user's collection
+    # Update user's database entry to mark waifu as claimed
     await user_collection.update_one(
         {'id': user_id},
-        {'$push': {'characters': waifu}, '$set': {'last_husbando_claim': datetime.utcnow()}},
+        {'$set': {'claimed_waifu': True}, '$push': {'characters': waifu}},
         upsert=True
     )
 
     # Prepare response message
     media_url = waifu.get('img_url') or waifu.get('vid_url')
     caption = (
-        f"{mention} 🎉 You claimed a husbando!\n"
+        f"{mention} 🎉 You have claimed a waifu!\n"
         f"🎐 **Name:** {waifu['name']}\n"
         f"🐙 **Rarity:** {waifu['rarity']}\n"
         f"💮 **Anime:** {waifu['anime']}\n"
@@ -123,17 +115,17 @@ async def claim_husbando(client: Client, message: Message):
     else:
         await message.reply_text(caption)  
 
-@app.on_message(filters.command("husbando_help") & filters.private)
-async def husbando_help(client: Client, message: Message):
-    """Displays help information for claiming a husbando."""
+@app.on_message(filters.command("waifu_help") & filters.private)
+async def waifu_help(client: Client, message: Message):
+    """Displays help information for claiming a waifu."""
     help_text = (
-        "👋 **Welcome to the Husbando Claim Bot!**\n\n"
+        "👋 **Welcome to the Waifu Claim Bot!**\n\n"
         "**Commands:**\n"
-        "/claim - Claim a random husbando (only in the allowed group)\n"
-        "/husbando_help - Show this help message\n\n"
+        "/claim - Claim a random waifu (only in the allowed group, one-time only)\n"
+        "/waifu_help - Show this help message\n\n"
         "**Instructions:**\n"
         f"1. Make sure you have joined both @{SUPPORT_CHAT} and @{MUST_JOIN}.\n"
-        "2. Use `/claim` to claim a husbando. You can only claim once every 24 hours.\n\n"
+        "2. Use `/claim` to claim a waifu. You can only claim **once** in your lifetime.\n\n"
         "🎉 Rarity Chances:\n"
         "⚪ Common - 60%\n"
         "🟢 Medium - 30%\n"
@@ -142,4 +134,4 @@ async def husbando_help(client: Client, message: Message):
         "Good luck and happy claiming!"
     )
     await message.reply_text(help_text)
-    
+                                  
