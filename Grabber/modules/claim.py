@@ -147,7 +147,7 @@ async def top_waifus(client: Client, message: Message):
 
         leaderboard_message += f"{i}. {profile_link} ➾ {waifu_count} waifus\n"
 
-    await message.reply_text(leaderboard_message, parse_mode="html")
+    await message.reply_text(leaderboard_message, parse_mode="HTML")
 
 
 @app.on_message(filters.command("waifu_help") & filters.private)
