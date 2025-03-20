@@ -128,7 +128,10 @@ async def send_image(update: Update, context: CallbackContext) -> None:
 
         character = random.choice(available_characters)
 
-    last_characters[chat_id] = character
+    last_characters[chat_id] = character  
+
+    # **Fix: Reset the first_correct_guesses when a new waifu appears**
+    first_correct_guesses[chat_id] = None  
 
     waifu_message[chat_id] = await context.bot.send_photo(
         chat_id=chat_id,
