@@ -42,36 +42,32 @@ async def has_joined_required_groups(user_id):
 
 @app.on_message(filters.command("claim") & filters.group)
 async def claim_waifu(client: Client, message: Message):
-    """Allows users to claim a waifu but requires group membership first."""
+    """Allows users to claim a waifu ONCE after joining required groups."""
     user_id = message.from_user.id
     first_name = html.escape(message.from_user.first_name)  
     mention = f"[{first_name}](tg://user?id={user_id})"
 
-    # Check if user has already been verified as a member
-    user_data = await user_collection.find_one({'user_id': user_id}, {'joined_required_groups': 1})
-    if not (user_data and user_data.get('joined_required_groups', False)):
-        if not await has_joined_required_groups(user_id):
-            return await message.reply_text(
-                "🔒 To claim a waifu, you must join both groups!",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Join Group", url=f"https://t.me/{MUST_JOIN}")],
-                    [InlineKeyboardButton("Join Channel", url=f"https://t.me/{SECOND_JOIN}")]
-                ])
-            )
-        
-        # Mark user as having joined required groups
-        await user_collection.update_one({'user_id': user_id}, {'$set': {'joined_required_groups': True}}, upsert=True)
-
     # Check if user already claimed a waifu
+    user_data = await user_collection.find_one({'user_id': user_id}, {'claimed_waifu': 1})
     if user_data and user_data.get('claimed_waifu', False):
-        return await message.reply_text("🎖️ **You have already claimed your waifu!**")
+        return await message.reply_text("🎖️ **You have already claimed your waifu and cannot claim again!**")
+
+    # Ensure user has joined the required groups
+    if not await has_joined_required_groups(user_id):
+        return await message.reply_text(
+            "🔒 To claim a waifu, you must join both groups!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Join Group", url=f"https://t.me/{MUST_JOIN}")],
+                [InlineKeyboardButton("Join Channel", url=f"https://t.me/{SECOND_JOIN}")]
+            ])
+        )
 
     # Get a random waifu
     waifu = await get_random_waifu()
     if not waifu:
         return await message.reply_text("⚠️ No waifus available at the moment. Try again later!")
 
-    # Store waifu claim in database
+    # Store waifu claim in database (only once)
     await user_collection.update_one(
         {'user_id': user_id},
         {
@@ -103,3 +99,4 @@ async def claim_waifu(client: Client, message: Message):
     except Exception as e:
         print(f"Failed to send media: {e}")
         await message.reply_text(caption)
+            
