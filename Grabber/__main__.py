@@ -164,7 +164,10 @@ async def guess(update: Update, context: CallbackContext) -> None:
     if chat_id in first_correct_guesses:
         last_grabber_id = first_correct_guesses[chat_id]
         last_grabber_user = await user_collection.find_one({'id': last_grabber_id})
-        last_grabber_name = last_grabber_user['first_name'] if last_grabber_user else 'Unknown User'
+
+        # FIXED: Use .get() to avoid KeyError
+        last_grabber_name = last_grabber_user.get('first_name', 'Unknown User') if last_grabber_user else 'Unknown User'
+
         await update.message.reply_text(
             f'⚠ Waifu already grabbed by <a href="tg://openmessage?user_id={last_grabber_id}">{escape(last_grabber_name)}</a>.\nℹ Wait for a new waifu to appear.',
             parse_mode='HTML'
@@ -187,6 +190,7 @@ async def guess(update: Update, context: CallbackContext) -> None:
         )
     else:
         await update.message.reply_text('❌ Incorrect name! Try again.')
+
 
 async def fav(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
