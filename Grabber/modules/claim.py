@@ -6,9 +6,9 @@ from pyrogram.errors import UserNotParticipant
 from Grabber import user_collection, collection
 from Grabber import Grabberu as app
 
-# Required groups/channels
+# Required groups
 MUST_JOIN = "seal_Your_WH_Group"
-SECOND_JOIN = "SEAL_UPDATE"
+SECOND_JOIN = "seal_Your_WH_Group"
 
 # Rarity probabilities
 RARITY_WEIGHTS = {
@@ -42,36 +42,44 @@ async def has_joined_required_groups(user_id):
 
 @app.on_message(filters.command("claim") & filters.group)
 async def claim_waifu(client: Client, message: Message):
-    """Allows users to claim a waifu ONCE after joining required groups."""
+    """Allows users to claim a waifu but only once."""
     user_id = message.from_user.id
     first_name = html.escape(message.from_user.first_name)  
     mention = f"[{first_name}](tg://user?id={user_id})"
 
-    # Check if user already claimed a waifu
+    # Check if the user has already claimed a waifu
     user_data = await user_collection.find_one({'user_id': user_id}, {'claimed_waifu': 1})
     if user_data and user_data.get('claimed_waifu', False):
-        return await message.reply_text("🎖️ **You have already claimed your waifu and cannot claim again!**")
+        return await message.reply_text("🎖️ **You have already claimed your waifu! You cannot claim again.**")
 
-    # Ensure user has joined the required groups
-    if not await has_joined_required_groups(user_id):
-        return await message.reply_text(
-            "🔒 To claim a waifu, you must join both groups!",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Join Group", url=f"https://t.me/{MUST_JOIN}")],
-                [InlineKeyboardButton("Join Channel", url=f"https://t.me/{SECOND_JOIN}")]
-            ])
-        )
+    # Check if the user has already been verified as a group member
+    if not (user_data and user_data.get('joined_required_groups', False)):
+        if not await has_joined_required_groups(user_id):
+            return await message.reply_text(
+                "🔒 To claim a waifu, you must join both groups!",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Join Group", url=f"https://t.me/{MUST_JOIN}")],
+                    [InlineKeyboardButton("Join Channel", url=f"https://t.me/{SECOND_JOIN}")]
+                ])
+            )
+        
+        # Save that user has joined the required groups
+        await user_collection.update_one({'user_id': user_id}, {'$set': {'joined_required_groups': True}}, upsert=True)
 
     # Get a random waifu
     waifu = await get_random_waifu()
     if not waifu:
         return await message.reply_text("⚠️ No waifus available at the moment. Try again later!")
 
-    # Store waifu claim in database (only once)
+    # Store waifu claim in database (ensuring user can only claim once)
     await user_collection.update_one(
         {'user_id': user_id},
         {
-            '$set': {'claimed_waifu': True, 'first_name': first_name, 'user_id': user_id},
+            '$set': {
+                'claimed_waifu': True,  # Mark as claimed forever
+                'first_name': first_name,
+                'user_id': user_id
+            },
             '$push': {'characters': waifu},
             '$inc': {'waifu_count': 1}
         },
@@ -99,4 +107,4 @@ async def claim_waifu(client: Client, message: Message):
     except Exception as e:
         print(f"Failed to send media: {e}")
         await message.reply_text(caption)
-            
+        
