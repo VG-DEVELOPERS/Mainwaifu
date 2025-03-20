@@ -8,7 +8,7 @@ from Grabber import Grabberu as app
 
 # Required groups/channels
 MUST_JOIN = "seal_Your_WH_Group"
-SECOND_JOIN = "seal_Your_WH_Group"
+SECOND_JOIN = "SEAL_UPDATE"
 
 # Rarity probabilities
 RARITY_WEIGHTS = {
