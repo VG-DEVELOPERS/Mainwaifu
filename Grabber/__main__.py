@@ -4,10 +4,8 @@ import random
 import re
 import asyncio
 from html import escape
-
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
-
 from Grabber import (
     collection, top_global_groups_collection, group_user_totals_collection,
     user_collection, user_totals_collection, db, LOGGER, Grabberu
@@ -18,11 +16,12 @@ from Grabber.modules import ALL_MODULES
 locks = {}
 message_counts = {}
 last_characters = {}
-sent_characters = {}
+waifu_spawn_order = {}
+message_count_per_chat = {}
 first_correct_guesses = {}
-last_grab = {}
 waifu_message = {}
-sealed_characters = {}
+last_user = {}
+warned_users = {}
 
 rarity_map = {
     1: "⚪ Common", 
@@ -47,17 +46,8 @@ special_rarity_thresholds = {
     "🔮 Limited Edition": 15000
 }
 
-seal_limits = {
-    "💠 Cosmic": 200,
-    "💮 Exclusive": 100,
-    "🔮 Limited Edition": 50
-}
-
 for module_name in ALL_MODULES:
     importlib.import_module("Grabber.modules." + module_name)
-
-last_user = {}
-warned_users = {}
 
 def escape_markdown(text):
     escape_chars = r'\*_`\\~>#+-=|{}.!'
@@ -94,9 +84,6 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
             await send_image(update, context)
             message_counts[chat_id] = 0
 
-waifu_spawn_order = {}
-message_count_per_chat = {}
-
 async def send_image(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
     all_characters = list(await collection.find({}).to_list(length=None))
@@ -115,22 +102,14 @@ async def send_image(update: Update, context: CallbackContext) -> None:
                 character = random.choice(available_characters)
                 break
     else:
-        rarity_cycle = []
-        for rarity, count in rarity_spawn_counts:
-            rarity_cycle.extend([rarity] * count)
-
+        rarity_cycle = [rarity for rarity, count in rarity_spawn_counts for _ in range(count)]
         current_rarity_index = waifu_spawn_order[chat_id] % len(rarity_cycle)
         required_rarity = rarity_cycle[current_rarity_index]
 
-        available_characters = [c for c in all_characters if c['rarity'] == required_rarity]
-        if not available_characters:
-            available_characters = all_characters
-
+        available_characters = [c for c in all_characters if c['rarity'] == required_rarity] or all_characters
         character = random.choice(available_characters)
 
     last_characters[chat_id] = character  
-
-    # **Fix: Reset the first_correct_guesses when a new waifu appears**
     first_correct_guesses[chat_id] = None  
 
     waifu_message[chat_id] = await context.bot.send_photo(
@@ -149,7 +128,7 @@ async def guess(update: Update, context: CallbackContext) -> None:
     if chat_id not in last_characters:
         return
 
-    if chat_id in first_correct_guesses:
+    if chat_id in first_correct_guesses and first_correct_guesses[chat_id] is not None:
         last_grabber_id = first_correct_guesses[chat_id]
         last_grabber_user = await user_collection.find_one({'id': last_grabber_id})
         last_grabber_name = last_grabber_user.get('first_name', 'Unknown User') if last_grabber_user else 'Unknown User'
@@ -165,8 +144,6 @@ async def guess(update: Update, context: CallbackContext) -> None:
 
     if sorted(name_parts) == sorted(guess.split()) or any(part == guess for part in name_parts):
         first_correct_guesses[chat_id] = user_id
-        last_grab[chat_id] = user_id
-
         await user_collection.update_one({'id': user_id}, {'$push': {'characters': last_characters[chat_id]}}, upsert=True)
 
         keyboard = [[InlineKeyboardButton(f"See Harem", switch_inline_query_current_chat=f"collection.{user_id}")]]
@@ -209,4 +186,4 @@ if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started successfully!")
     main()
-          
+        
