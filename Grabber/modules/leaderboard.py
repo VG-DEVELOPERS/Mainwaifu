@@ -11,11 +11,10 @@ from Grabber import sudo_users as SUDO_USERS
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-
 async def global_leaderboard(update: Update, context: CallbackContext) -> None:
     cursor = top_global_groups_collection.aggregate([
-        {"$project": {"group_name": 1, "count": 1}},
-        {"$sort": {"count": -1}},
+        {"$group": {"_id": "$group_id", "group_name": {"$first": "$group_name"}, "total_count": {"$sum": "$count"}}},
+        {"$sort": {"total_count": -1}},
         {"$limit": 20}
     ])
     leaderboard_data = await cursor.to_list(length=20)
@@ -24,18 +23,19 @@ async def global_leaderboard(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("No group data available.")
         return
 
-    leaderboard_message = "<b>TOP 20 GROUPS WHO GUESSED MOST CHARACTERS</b>\n\n"
+    leaderboard_message = "<b>🏆 TOP 20 GROUPS WHO GUESSED MOST CHARACTERS 🏆</b>\n\n"
     for i, group in enumerate(leaderboard_data, start=1):
         group_name = html.escape(group.get('group_name', 'Unknown'))
         if len(group_name) > 20:
             group_name = group_name[:25] + '...'
-        leaderboard_message += f'{i}. <b>{group_name}</b> ➾ <b>{group["count"]}</b>\n'
+        leaderboard_message += f'{i}. <b>{group_name}</b> ➾ <b>{group["total_count"]}</b>\n'
 
     await update.message.reply_photo(
         photo="https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg",
         caption=leaderboard_message,
         parse_mode='HTML'
     )
+    
 
 
 async def ctop(update: Update, context: CallbackContext) -> None:
