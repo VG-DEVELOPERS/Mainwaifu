@@ -91,10 +91,10 @@ async def ctop(update: Update, context: CallbackContext) -> None:
     photo_url = "https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg"  # Your photo URL
 
     await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
-
+  
 async def leaderboard(update: Update, context: CallbackContext) -> None:
     cursor = user_collection.aggregate([
-        {"$project": {"user_id": 1, "first_name": 1, "character_count": {"$size": "$characters"}}},
+        {"$group": {"_id": "$id", "first_name": {"$first": "$first_name"}, "character_count": {"$sum": {"$size": "$characters"}}}},
         {"$sort": {"character_count": -1}},
         {"$limit": 10}
     ])
@@ -103,12 +103,9 @@ async def leaderboard(update: Update, context: CallbackContext) -> None:
     leaderboard_message = "<b>🏆 TOP 10 USERS WITH MOST CHARACTERS 🏆</b>\n\n"
 
     for i, user in enumerate(leaderboard_data, start=1):
-        user_id = user.get('user_id')
+        user_id = user.get('_id')
         first_name = html.escape(user.get('first_name', 'Unknown'))
-
-        if not user_id:
-            user_id = 0  # Default if user_id is missing (prevents None issue)
-
+        
         if len(first_name) > 15:
             first_name = first_name[:15] + '...'
 
