@@ -8,8 +8,10 @@ from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
-from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
-                     user_collection, user_totals_collection, db, LOGGER, Grabberu)
+from Grabber import (
+    collection, top_global_groups_collection, group_user_totals_collection,
+    user_collection, user_totals_collection, db, LOGGER, Grabberu
+)
 from Grabber import application, SUPPORT_CHAT, UPDATE_CHAT
 from Grabber.modules import ALL_MODULES
 
@@ -21,7 +23,7 @@ first_correct_guesses = {}
 last_grab = {}
 waifu_message = {}
 sealed_characters = {}
-# Rarity Mapping
+
 rarity_map = {
     1: "⚪ Common", 
     2: "🟢 Medium", 
@@ -32,7 +34,6 @@ rarity_map = {
     7: "🔮 Limited Edition"
 }
 
-# Spawn Rates
 rarity_spawn_counts = [
     ("⚪ Common", 5), 
     ("🟢 Medium", 3), 
@@ -40,13 +41,12 @@ rarity_spawn_counts = [
     ("🟡 Legendary", 1)
 ]
 
-# Special Rarity Message Thresholds
 special_rarity_thresholds = {
     "💠 Cosmic": 5000,
     "💮 Exclusive": 10000,
     "🔮 Limited Edition": 15000
 }
-  
+
 seal_limits = {
     "💠 Cosmic": 200,
     "💮 Exclusive": 100,
@@ -94,26 +94,20 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
             await send_image(update, context)
             message_counts[chat_id] = 0
 
-# Track spawn sequence and message count per chat
 waifu_spawn_order = {}
 message_count_per_chat = {}
 
 async def send_image(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
-
-    # Retrieve all characters
     all_characters = list(await collection.find({}).to_list(length=None))
 
-    # Initialize tracking for the chat if not present
     if chat_id not in waifu_spawn_order:
-        waifu_spawn_order[chat_id] = 0  # Track spawn index
+        waifu_spawn_order[chat_id] = 0
     if chat_id not in message_count_per_chat:
-        message_count_per_chat[chat_id] = 0  # Track total messages
+        message_count_per_chat[chat_id] = 0
 
-    # Increment message count
     message_count_per_chat[chat_id] += 1
 
-    # Check if a special rarity character should appear
     for rarity, threshold in special_rarity_thresholds.items():
         if message_count_per_chat[chat_id] % threshold == 0:
             available_characters = [c for c in all_characters if c['rarity'] == rarity]
@@ -121,27 +115,21 @@ async def send_image(update: Update, context: CallbackContext) -> None:
                 character = random.choice(available_characters)
                 break
     else:
-        # Normal rarity cycle (Common → Medium → Rare → Legendary → Repeat)
         rarity_cycle = []
         for rarity, count in rarity_spawn_counts:
             rarity_cycle.extend([rarity] * count)
 
-        # Determine current rarity based on cycle
         current_rarity_index = waifu_spawn_order[chat_id] % len(rarity_cycle)
         required_rarity = rarity_cycle[current_rarity_index]
 
-        # Filter available characters for the required rarity
         available_characters = [c for c in all_characters if c['rarity'] == required_rarity]
-
         if not available_characters:
-            available_characters = all_characters  # Fallback to any character
+            available_characters = all_characters
 
         character = random.choice(available_characters)
 
-    # Store the character as the latest spawn
     last_characters[chat_id] = character
 
-    # Send waifu image and info
     waifu_message[chat_id] = await context.bot.send_photo(
         chat_id=chat_id,
         photo=character['img_url'],
@@ -149,10 +137,7 @@ async def send_image(update: Update, context: CallbackContext) -> None:
         parse_mode='Markdown'
     )
 
-    # Move to the next rarity in sequence
     waifu_spawn_order[chat_id] += 1
-  
-
 
 async def guess(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
@@ -164,8 +149,6 @@ async def guess(update: Update, context: CallbackContext) -> None:
     if chat_id in first_correct_guesses:
         last_grabber_id = first_correct_guesses[chat_id]
         last_grabber_user = await user_collection.find_one({'id': last_grabber_id})
-
-        # FIXED: Use .get() to avoid KeyError
         last_grabber_name = last_grabber_user.get('first_name', 'Unknown User') if last_grabber_user else 'Unknown User'
 
         await update.message.reply_text(
@@ -191,7 +174,6 @@ async def guess(update: Update, context: CallbackContext) -> None:
     else:
         await update.message.reply_text('❌ Incorrect name! Try again.')
 
-
 async def fav(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
 
@@ -200,9 +182,9 @@ async def fav(update: Update, context: CallbackContext) -> None:
         return
 
     character_id = context.args[0]
-
     user = await user_collection.find_one({'id': user_id})
-    if not user:
+
+    if not user or 'characters' not in user:
         await update.message.reply_text('You have not Guessed any characters yet....')
         return
 
@@ -211,35 +193,17 @@ async def fav(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text('This Character is Not In your collection')
         return
 
-    user['favorites'] = [character_id]
-    await user_collection.update_one({'id': user_id}, {'$set': {'favorites': user['favorites']}})
-
+    await user_collection.update_one({'id': user_id}, {'$set': {'favorites': [character_id]}})
     await update.message.reply_text(f'Character {character["name"]} has been added to your favorite...')
 
-async def find_limited(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_user.id
-    user = await user_collection.find_one({'id': user_id})
-
-    if not user or 'characters' not in user:
-        await update.message.reply_text("You have no characters in your collection.")
-        return
-
-    limited_chars = [c['name'] for c in user['characters'] if c['rarity'] == "🔮 Limited Edition"]
-    if not limited_chars:
-        await update.message.reply_text("You have no Limited Edition characters.")
-    else:
-        await update.message.reply_text(f"You have {len(limited_chars)} Limited Edition characters:\n" + "\n".join(limited_chars))
 def main() -> None:
-    """Run bot."""
     application.add_handler(CommandHandler("seal", guess, block=False))
     application.add_handler(CommandHandler("fav", fav, block=False))
-    application.add_handler(CommandHandler("find_limited", find_limited, block=False))  # Changed to find_limited
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
-
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    Grabberu.start()  # Ensure it starts properly
+    Grabberu.start()
     LOGGER.info("Bot started successfully!")
     main()
-
+          
