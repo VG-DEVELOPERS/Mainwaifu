@@ -48,19 +48,19 @@ async def claim_waifu(client: Client, message: Message):
     mention = f"[{first_name}](tg://user?id={user_id})"
 
     # Check if user exists in the database; if not, insert them
-    user_data = await user_collection.find_one({'user_id': user_id})
+    user_data = await user_collection.find_one({'id': user_id})
 
     if not user_data:
         print(f"🔍 New user detected: {user_id}, inserting into database...")
-        await user_collection.insert_one({
-            'user_id': user_id,
+        user_data = {
+            'id': user_id,
             'first_name': first_name,
             'claimed_waifu': False,
             'joined_required_groups': False,
             'characters': [],
             'waifu_count': 0
-        })
-        user_data = await user_collection.find_one({'user_id': user_id})  # Fetch again after insert
+        }
+        await user_collection.insert_one(user_data)
 
     # Check if the user has already claimed a waifu
     if user_data.get('claimed_waifu', False):
@@ -78,7 +78,7 @@ async def claim_waifu(client: Client, message: Message):
             )
 
         # Save that user has joined the required groups
-        await user_collection.update_one({'user_id': user_id}, {'$set': {'joined_required_groups': True}})
+        await user_collection.update_one({'id': user_id}, {'$set': {'joined_required_groups': True}})
         print(f"✅ User {user_id} marked as joined_required_groups")
 
     # Get a random waifu
@@ -86,23 +86,30 @@ async def claim_waifu(client: Client, message: Message):
     if not waifu:
         return await message.reply_text("⚠️ No waifus available at the moment. Try again later!")
 
-    # Store waifu claim in database (ensuring user can only claim once)
-    update_result = await user_collection.update_one(
-        {'user_id': user_id},
+    # Format waifu data to match `harem` structure
+    waifu_data = {
+        'id': waifu['id'],
+        'name': waifu['name'],
+        'anime': waifu['anime'],
+        'rarity': waifu['rarity'],
+        'img_url': waifu.get('img_url', ''),
+        'vid_url': waifu.get('vid_url', '')
+    }
+
+    # Store waifu claim in user collection
+    await user_collection.update_one(
+        {'id': user_id},
         {
             '$set': {
                 'claimed_waifu': True,  # Mark as claimed forever
                 'first_name': first_name
             },
-            '$push': {'characters': waifu},
-            '$inc': {'waifu_count': 1}
+            '$push': {'characters': waifu_data},  # Add waifu to character list
+            '$inc': {'waifu_count': 1}  # Increase waifu count
         }
     )
 
-    if update_result.modified_count:
-        print(f"✅ Successfully updated database for {user_id}")
-    else:
-        print(f"⚠️ Failed to update database for {user_id}")
+    print(f"✅ Successfully updated database for {user_id}")
 
     # Prepare response message
     media_url = waifu.get('img_url') or waifu.get('vid_url')
