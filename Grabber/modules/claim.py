@@ -47,13 +47,27 @@ async def claim_waifu(client: Client, message: Message):
     first_name = html.escape(message.from_user.first_name)  
     mention = f"[{first_name}](tg://user?id={user_id})"
 
+    # Check if user exists in the database; if not, insert them
+    user_data = await user_collection.find_one({'user_id': user_id})
+
+    if not user_data:
+        print(f"🔍 New user detected: {user_id}, inserting into database...")
+        await user_collection.insert_one({
+            'user_id': user_id,
+            'first_name': first_name,
+            'claimed_waifu': False,
+            'joined_required_groups': False,
+            'characters': [],
+            'waifu_count': 0
+        })
+        user_data = await user_collection.find_one({'user_id': user_id})  # Fetch again after insert
+
     # Check if the user has already claimed a waifu
-    user_data = await user_collection.find_one({'user_id': user_id}, {'claimed_waifu': 1})
-    if user_data and user_data.get('claimed_waifu', False):
+    if user_data.get('claimed_waifu', False):
         return await message.reply_text("🎖️ **You have already claimed your waifu! You cannot claim again.**")
 
     # Check if the user has already been verified as a group member
-    if not (user_data and user_data.get('joined_required_groups', False)):
+    if not user_data.get('joined_required_groups', False):
         if not await has_joined_required_groups(user_id):
             return await message.reply_text(
                 "🔒 To claim a waifu, you must join both groups!",
@@ -62,9 +76,10 @@ async def claim_waifu(client: Client, message: Message):
                     [InlineKeyboardButton("Join Channel", url=f"https://t.me/{SECOND_JOIN}")]
                 ])
             )
-        
+
         # Save that user has joined the required groups
-        await user_collection.update_one({'user_id': user_id}, {'$set': {'joined_required_groups': True}}, upsert=True)
+        await user_collection.update_one({'user_id': user_id}, {'$set': {'joined_required_groups': True}})
+        print(f"✅ User {user_id} marked as joined_required_groups")
 
     # Get a random waifu
     waifu = await get_random_waifu()
@@ -72,19 +87,22 @@ async def claim_waifu(client: Client, message: Message):
         return await message.reply_text("⚠️ No waifus available at the moment. Try again later!")
 
     # Store waifu claim in database (ensuring user can only claim once)
-    await user_collection.update_one(
+    update_result = await user_collection.update_one(
         {'user_id': user_id},
         {
             '$set': {
                 'claimed_waifu': True,  # Mark as claimed forever
-                'first_name': first_name,
-                'user_id': user_id
+                'first_name': first_name
             },
             '$push': {'characters': waifu},
             '$inc': {'waifu_count': 1}
-        },
-        upsert=True
+        }
     )
+
+    if update_result.modified_count:
+        print(f"✅ Successfully updated database for {user_id}")
+    else:
+        print(f"⚠️ Failed to update database for {user_id}")
 
     # Prepare response message
     media_url = waifu.get('img_url') or waifu.get('vid_url')
