@@ -1,6 +1,6 @@
 import html
 import random
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler
 from Grabber import application, user_collection
 
@@ -39,18 +39,26 @@ async def harem(update: Update, context: CallbackContext) -> None:
 
     harem_message = f"{username}'s Recent Waifus - Page: {page+1}/{total_pages}\n\n"
 
+    media_group = []
+
     # Show favorite character (or random one if no favorite)
     if fav_character:
         char_id = fav_character.get("id", "Unknown")
         name = fav_character.get("name", "Unknown")
         anime = fav_character.get("anime", "Unknown")
         rarity = fav_character.get("rarity", "Unknown")
+        imgurl = fav_character.get("imgurl", None)  # Get image URL
+
         harem_message += (
             f"⭐ **Favorite Character:**\n"
             f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
             f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
             f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
         )
+
+        # Add favorite character's image if available
+        if imgurl:
+            media_group.append(InputMediaPhoto(media=imgurl, caption=harem_message, parse_mode="Markdown"))
 
     # Display the current page of characters
     characters_on_page = characters[page * per_page : (page + 1) * per_page]
@@ -78,7 +86,11 @@ async def harem(update: Update, context: CallbackContext) -> None:
 
     keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
-    await update.message.reply_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
+    # Send media group if an image is available, otherwise send text
+    if media_group:
+        await update.message.reply_media_group(media_group)
+    else:
+        await update.message.reply_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
 
 
 async def harem_callback(update: Update, context: CallbackContext) -> None:
@@ -114,18 +126,24 @@ async def harem_callback(update: Update, context: CallbackContext) -> None:
         fav_character = random.choice(characters) if characters else None
 
     harem_message = f"{username}'s Recent Waifus - Page: {page+1}/{total_pages}\n\n"
+    media_group = []
 
     if fav_character:
         char_id = fav_character.get("id", "Unknown")
         name = fav_character.get("name", "Unknown")
         anime = fav_character.get("anime", "Unknown")
         rarity = fav_character.get("rarity", "Unknown")
+        imgurl = fav_character.get("imgurl", None)
+
         harem_message += (
             f"⭐ **Favorite Character:**\n"
             f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
             f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
             f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
         )
+
+        if imgurl:
+            media_group.append(InputMediaPhoto(media=imgurl, caption=harem_message, parse_mode="Markdown"))
 
     # Display characters on the current page
     characters_on_page = characters[page * per_page : (page + 1) * per_page]
@@ -153,7 +171,10 @@ async def harem_callback(update: Update, context: CallbackContext) -> None:
 
     keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
-    await query.message.edit_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
+    if media_group:
+        await query.message.reply_media_group(media_group)
+    else:
+        await query.message.edit_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
     await query.answer()
 
 
