@@ -7,7 +7,7 @@ from pymongo import MongoClient
 
 from Grabber import user_collection, collection, application
 
-SUPPORT_ID = -1002528887253  # Replace with your support group ID
+SUPPORT_GROUP_ID = -1002528887253  # Replace with your support group ID
 OWNER_ID = 7717913705  # Replace with your actual group ID
 current_characters = {}  # Stores waifu per group
 
