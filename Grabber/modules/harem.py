@@ -1,13 +1,13 @@
 import html
 import random
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler
 from Grabber import application, user_collection
 
 
 async def harem(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
-    username = update.effective_user.first_name  # Get actual username
+    username = update.effective_user.first_name  
     user_data = await user_collection.find_one({"id": user_id})
 
     if not user_data or "characters" not in user_data or not user_data["characters"]:
@@ -15,7 +15,7 @@ async def harem(update: Update, context: CallbackContext) -> None:
         return
 
     characters = user_data["characters"]
-    favorite_character_id = user_data.get("fav_character")  # Get favorite character if exists
+    favorite_character_id = user_data.get("fav_character")  
 
     per_page = 5  
     page = int(context.args[0]) if context.args and context.args[0].isdigit() else 0
@@ -31,122 +31,36 @@ async def harem(update: Update, context: CallbackContext) -> None:
         "🔮": "Limited Edition",
     }
 
-    # Select favorite character or random one if none is set
+    # Select favorite character or random one if not set
+    fav_character = None
     if favorite_character_id:
-        fav_character = next((c for c in characters if c.get("id") == favorite_character_id), None)
-    else:
-        fav_character = random.choice(characters) if characters else None
+        fav_character = next((c for c in characters if isinstance(c, dict) and c.get("id") == favorite_character_id), None)
 
-    harem_message = f"{username}'s Recent Waifus - Page: {page+1}/{total_pages}\n\n"
+    if not fav_character:
+        fav_character = random.choice([c for c in characters if isinstance(c, dict)])  # Pick a random character
 
-    media_group = []
+    harem_message = f"**{username}'s Recent Waifus - Page: {page+1}/{total_pages}**\n\n"
 
-    # Show favorite character (or random one if no favorite)
-    if fav_character:
+    if fav_character and isinstance(fav_character, dict):
         char_id = fav_character.get("id", "Unknown")
         name = fav_character.get("name", "Unknown")
         anime = fav_character.get("anime", "Unknown")
         rarity = fav_character.get("rarity", "Unknown")
-        imgurl = fav_character.get("imgurl", None)  # Get image URL
+        imgurl = fav_character.get("imgurl", None)  
 
         harem_message += (
-            f"⭐ **Favorite Character:**\n"
+            f"⭐ **Favorite Character (or Random):**\n"
             f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
             f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
             f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
         )
 
-        # Add favorite character's image if available
+        # Send the character's image separately
         if imgurl:
-            media_group.append(InputMediaPhoto(media=imgurl, caption=harem_message, parse_mode="Markdown"))
+            await update.message.reply_photo(photo=imgurl, caption=f"⭐ **{name}** - Your Special Waifu!", parse_mode="Markdown")
 
     # Display the current page of characters
-    characters_on_page = characters[page * per_page : (page + 1) * per_page]
-    for char in characters_on_page:
-        if char == fav_character:  # Skip if already displayed as favorite
-            continue
-
-        char_id = char.get("id", "Unknown")
-        name = char.get("name", "Unknown")
-        anime = char.get("anime", "Unknown")
-        rarity = char.get("rarity", "Unknown")
-
-        harem_message += (
-            f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
-            f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
-            f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
-        )
-
-    # Pagination buttons
-    buttons = []
-    if page > 0:
-        buttons.append(InlineKeyboardButton("⏮ Previous", callback_data=f"harem_{page-1}"))
-    if page + 1 < total_pages:
-        buttons.append(InlineKeyboardButton("⏭ Next", callback_data=f"harem_{page+1}"))
-
-    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
-
-    # Send media group if an image is available, otherwise send text
-    if media_group:
-        await update.message.reply_media_group(media_group)
-    else:
-        await update.message.reply_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
-
-
-async def harem_callback(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    user_id = query.from_user.id
-    username = query.from_user.first_name
-    user_data = await user_collection.find_one({"id": user_id})
-
-    if not user_data or "characters" not in user_data or not user_data["characters"]:
-        await query.answer("Your harem is empty!")
-        return
-
-    characters = user_data["characters"]
-    favorite_character_id = user_data.get("fav_character")
-    page = int(query.data.split("_")[1]) if query.data else 0
-    per_page = 5  
-    total_pages = (len(characters) + per_page - 1) // per_page  
-
-    rarity_map = {
-        "⚪": "Common",
-        "🟠": "Rare",
-        "🟡": "Legendary",
-        "🟢": "Medium",
-        "💠": "Cosmic",
-        "💮": "Exclusive",
-        "🔮": "Limited Edition",
-    }
-
-    # Select favorite character or random one
-    if favorite_character_id:
-        fav_character = next((c for c in characters if c.get("id") == favorite_character_id), None)
-    else:
-        fav_character = random.choice(characters) if characters else None
-
-    harem_message = f"{username}'s Recent Waifus - Page: {page+1}/{total_pages}\n\n"
-    media_group = []
-
-    if fav_character:
-        char_id = fav_character.get("id", "Unknown")
-        name = fav_character.get("name", "Unknown")
-        anime = fav_character.get("anime", "Unknown")
-        rarity = fav_character.get("rarity", "Unknown")
-        imgurl = fav_character.get("imgurl", None)
-
-        harem_message += (
-            f"⭐ **Favorite Character:**\n"
-            f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
-            f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
-            f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
-        )
-
-        if imgurl:
-            media_group.append(InputMediaPhoto(media=imgurl, caption=harem_message, parse_mode="Markdown"))
-
-    # Display characters on the current page
-    characters_on_page = characters[page * per_page : (page + 1) * per_page]
+    characters_on_page = [c for c in characters[page * per_page : (page + 1) * per_page] if isinstance(c, dict)]
     for char in characters_on_page:
         if char == fav_character:
             continue
@@ -171,14 +85,10 @@ async def harem_callback(update: Update, context: CallbackContext) -> None:
 
     keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
-    if media_group:
-        await query.message.reply_media_group(media_group)
-    else:
-        await query.message.edit_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
-    await query.answer()
+    # Send harem message separately (so image sends first)
+    await update.message.reply_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
 
 
-# Register command and callback handler
+# Register command
 application.add_handler(CommandHandler("harem", harem, block=False))
-application.add_handler(CallbackQueryHandler(harem_callback, pattern="^harem_"))
-        
+                                            
