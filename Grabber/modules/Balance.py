@@ -112,8 +112,7 @@ async def nguess(update: Update, context: CallbackContext):
 
     await update.message.reply_photo(photo=character['img_url'], caption="✨ Guess this Waifu! 🧐✨")
 
-    context.job_queue.run_once(send_timeout_message, when=300, data={"chat_id": chat_id, "character_name": character_name})
-
+    
 async def handle_guess(update: Update, context: CallbackContext):
     if not update.message or not update.message.text:
         return  
@@ -141,16 +140,9 @@ async def handle_guess(update: Update, context: CallbackContext):
 
             del current_characters[chat_id]
             await nguess(update, context)
+           
             
 
-async def send_timeout_message(context: CallbackContext):
-    job_data = context.job.data
-    chat_id = job_data["chat_id"]
-    character_name = job_data["character_name"]
-
-    if chat_id in current_characters and not current_characters[chat_id]["guessed"]:
-        await context.bot.send_message(chat_id, f"⏳ Time's up! The correct answer was **{character_name}**.")
-        del current_characters[chat_id]
 
 async def name(update: Update, context: CallbackContext):
     if update.message.reply_to_message and update.message.reply_to_message.photo:
