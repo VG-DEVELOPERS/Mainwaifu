@@ -115,6 +115,9 @@ async def nguess(update: Update, context: CallbackContext):
     context.job_queue.run_once(send_timeout_message, when=300, data={"chat_id": chat_id, "character_name": character_name})
 
 async def handle_guess(update: Update, context: CallbackContext):
+    if not update.message or not update.message.text:
+        return  
+
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     guess = update.message.text.strip().lower()
@@ -138,6 +141,7 @@ async def handle_guess(update: Update, context: CallbackContext):
 
             del current_characters[chat_id]
             await nguess(update, context)
+            
 
 async def send_timeout_message(context: CallbackContext):
     job_data = context.job.data
