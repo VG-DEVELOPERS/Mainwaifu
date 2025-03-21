@@ -14,11 +14,13 @@ current_characters = {}  # Stores waifu per group
 async def add_coins(user_id: int, amount: int):
     if amount <= 0:
         return
-    await user_collection.update_one(
-        {"id": user_id},
-        {"$inc": {"balance": amount}, "$setOnInsert": {"balance": 0}},
-        upsert=True
-    )
+
+    user_data = await user_collection.find_one({"id": user_id}, projection={"balance": 1})
+
+    if user_data:
+        await user_collection.update_one({"id": user_id}, {"$inc": {"balance": amount}})
+    else:
+        await user_collection.insert_one({"id": user_id, "balance": amount})
 
 async def balance(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
