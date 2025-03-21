@@ -10,6 +10,7 @@ from Grabber import user_collection, collection, application
 SUPPORT_GROUP_ID = -1002528887253  # Replace with your support group ID
 OWNER_ID = 7717913705  # Replace with your actual group ID
 current_characters = {}  # Stores waifu per group
+current_character = {}  # Stores active waifu guesses for each chat
 
 async def add_coins(user_id: int, amount: int):
     if amount <= 0:
