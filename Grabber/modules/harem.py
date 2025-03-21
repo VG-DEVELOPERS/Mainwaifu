@@ -1,5 +1,4 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from itertools import groupby
 import math
 import random
 from html import escape
@@ -20,25 +19,31 @@ async def harem(update: Update, context: CallbackContext, page=0) -> None:
         return
 
     characters = user['characters']
-    unique_characters = {char['id']: char for char in characters}.values()
-    character_counts = {char['id']: characters.count(char) for char in characters}
-    
+
+    if isinstance(characters, list) and all(isinstance(char, str) for char in characters):
+        characters = [{'id': char} for char in characters]  
+
+    unique_characters = {}
+    character_counts = {}
+
+    for char in characters:
+        if isinstance(char, dict) and 'id' in char:
+            char_id = char['id']
+            unique_characters[char_id] = char
+            character_counts[char_id] = character_counts.get(char_id, 0) + 1
+
     total_pages = math.ceil(len(unique_characters) / 15)
     page = max(0, min(page, total_pages - 1))
 
     harem_message = f"<b>{escape(update.effective_user.first_name)}'s Harem - Page {page+1}/{total_pages}</b>\n"
-    current_characters = list(unique_characters)[page * 15:(page + 1) * 15]
+    current_characters = list(unique_characters.values())[page * 15:(page + 1) * 15]
 
-    grouped_characters = {k: list(v) for k, v in groupby(sorted(current_characters, key=lambda x: x['anime']), key=lambda x: x['anime'])}
-
-    for anime, chars in grouped_characters.items():
-        total_anime_characters = sum(1 for c in characters if c.get('anime') == anime)
-        harem_message += f'\n<b>{anime} {len(chars)}/{total_anime_characters}</b>\n'
-        for char in chars:
-            char_id = char['id']
-            rarity = char.get('rarity', 'Unknown Rarity')
-            count = character_counts.get(char_id, 1)
-            harem_message += f'{char_id} ({rarity}) {char["name"]} ×{count}\n'
+    for char in current_characters:
+        char_id = char['id']
+        anime = char.get("anime", "Unknown Anime")
+        rarity = char.get('rarity', 'Unknown Rarity')
+        count = character_counts.get(char_id, 1)
+        harem_message += f'\n<b>{anime}</b>\n{char_id} ({rarity}) {char.get("name", "Unknown Name")} ×{count}\n'
 
     total_count = len(user['characters'])
     keyboard = [[InlineKeyboardButton(f"See Collection ({total_count})", switch_inline_query_current_chat=f"collection.{user_id}")]]
@@ -54,8 +59,8 @@ async def harem(update: Update, context: CallbackContext, page=0) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     fav_character_id = user.get('favorites', [None])[0]
-    fav_character = next((c for c in characters if c['id'] == fav_character_id), None)
-    image_url = fav_character['img_url'] if fav_character and 'img_url' in fav_character else None
+    fav_character = next((c for c in characters if c.get('id') == fav_character_id), None)
+    image_url = fav_character.get('img_url') if fav_character else None
 
     if not image_url and characters:
         random_character = random.choice(characters)
