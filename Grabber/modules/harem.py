@@ -41,13 +41,13 @@ async def harem(update: Update, context: CallbackContext) -> None:
 
     harem_message = f"**{username}'s Recent Waifus - Page: {page+1}/{total_pages}**\n\n"
 
-    imgurl = None  # Store image URL separately
+    img_url = None  
     if fav_character and isinstance(fav_character, dict):
         char_id = fav_character.get("id", "Unknown")
         name = fav_character.get("name", "Unknown")
         anime = fav_character.get("anime", "Unknown")
         rarity = fav_character.get("rarity", "Unknown")
-        imgurl = fav_character.get("imgurl", None)  
+        img_url = fav_character.get("imgurl", "").strip()  
 
         harem_message += (
             f"⭐ **Favorite Character (or Random):**\n"
@@ -82,16 +82,22 @@ async def harem(update: Update, context: CallbackContext) -> None:
 
     keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
-    # ✅ Send image **first** (if available)
-    if imgurl:
+    # ✅ Send both Image and Message in One
+    if img_url:
         try:
-            await update.message.reply_photo(photo=imgurl, caption=f"⭐ **{fav_character.get('name', 'Unknown')}** - Your Special Waifu!", parse_mode="Markdown")
+            await update.message.reply_photo(
+                photo=img_url,
+                caption=harem_message,
+                reply_markup=keyboard,
+                parse_mode="Markdown"
+            )
+            return  # Stop here since we've sent everything in one message
         except Exception as e:
-            print(f"Error sending image: {e}")  # Log error if image fails
+            print(f"[ERROR] Failed to send image: {e}")
 
-    # ✅ Then send the harem message
+    # ✅ If image fails, send text only
     await update.message.reply_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
 
 
 # Register command
-application.add_handler(CommandHandler("harem", harem, block=False))
+application.add_handler(CommandHandler(["harem", "collection"], harem, block=False))
