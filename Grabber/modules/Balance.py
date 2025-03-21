@@ -164,26 +164,22 @@ async def send_timeout_message(context: CallbackContext):
         del current_characters[chat_id]
 
 async def name(update, context):
-    if not update.message or not update.message.reply_to_message or not update.message.reply_to_message.photo:
-        await update.message.reply_text("Please reply to a waifu image to get the character name.")
-        return
+    if not update.message.reply_to_message or not update.message.reply_to_message.photo:
+        return  
 
     chat_id = update.effective_chat.id
-
     if chat_id in current_character:
         character = current_character[chat_id]["character"]
-        character_name = character['name']
+        character_name = character["name"]
 
-        copy_string = f"None {character_name}"
+        copy_text = f"`None {character_name}`"
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("📋 Copy Name", switch_inline_query=copy_text)]])
 
         await update.message.reply_text(
-            f"**Character Name:** {character_name}\n\n"
-            f"**Copy String:** `{copy_string}`",
-            parse_mode='Markdown'
-        )
-    else:
-        await update.message.reply_text("No active waifu guess found!")
-        
+            f"Character Name: {character_name}\n\nClick below to copy:",
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )        
 application.add_handler(CommandHandler("balance", balance))
 application.add_handler(CommandHandler("pay", pay))
 application.add_handler(CommandHandler("daily", daily_reward))
