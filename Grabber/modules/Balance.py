@@ -11,12 +11,12 @@ SUPPORT_GROUP_ID = -1002528887253
 OWNER_ID = 7717913705  
 current_characters = {}  
 
+MAX_ACTIVE_GAMES = 100  
+
 async def add_coins(user_id: int, amount: int):
     if amount <= 0:
         return
-
     user_data = await user_collection.find_one({"id": user_id}, projection={"balance": 1})
-
     if user_data:
         await user_collection.update_one({"id": user_id}, {"$inc": {"balance": amount}})
     else:
@@ -30,7 +30,6 @@ async def balance(update: Update, context: CallbackContext):
 
 async def pay(update: Update, context: CallbackContext):
     sender_id = update.effective_user.id
-
     if not update.message.reply_to_message:
         await update.message.reply_text("Reply to a message to use /pay.")
         return
@@ -94,6 +93,10 @@ async def nguess(update: Update, context: CallbackContext):
         await update.message.reply_text("❌ This command only works in @seal_Your_WH_Group.")
         return
 
+    if len(current_characters) >= MAX_ACTIVE_GAMES:
+        await update.message.reply_text("⚠️ Too many active waifu games! Wait for others to finish.")
+        return
+
     characters = await collection.aggregate([{"$sample": {"size": 1}}]).to_list(1)
     if not characters:
         await update.message.reply_text("No waifus found in the database.")
@@ -123,12 +126,18 @@ async def handle_guess(update: Update, context: CallbackContext):
     character = data["character"]
     character_name = character['name'].strip().lower()
 
-    if not data["guessed"] and character_name.startswith(guess):
-        await add_coins(user_id, 20)
-        await update.message.reply_text(f"🎉 Correct! You earned 20 coins!")
+    if not data["guessed"]:
+        correct_words = set(character_name.split())
+        guess_words = set(guess.split())
 
-        del current_characters[chat_id]
-        await nguess(update, context)
+        valid_guesses = [word for word in guess_words if len(word) > 1]  
+
+        if correct_words.intersection(valid_guesses):  
+            await add_coins(user_id, 20)
+            await update.message.reply_text(f"🎉 Correct! You earned 20 coins!")
+
+            del current_characters[chat_id]
+            await nguess(update, context)
 
 async def send_timeout_message(context: CallbackContext):
     job_data = context.job.data
