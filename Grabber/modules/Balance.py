@@ -144,7 +144,7 @@ async def name(update: Update, context: CallbackContext):
         chat_id = update.effective_chat.id
         if chat_id in current_characters:
             character_name = current_characters[chat_id]["character"]["name"]
-            await update.message.reply_text(f"📜 Character Name: **{character_name}**")
+            await update.message.reply_text(f"📜 Character Name: `{character_name}`")
         else:
             await update.message.reply_text("⚠️ No active waifu to name!")
     else:
