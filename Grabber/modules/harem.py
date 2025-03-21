@@ -5,13 +5,12 @@ from html import escape
 from telegram.ext import CommandHandler, CallbackContext, CallbackQueryHandler
 from Grabber import user_collection, application
 
-
 async def harem(update: Update, context: CallbackContext, page=0) -> None:
     user_id = update.effective_user.id
     user = await user_collection.find_one({'id': user_id})
 
     if not user or 'characters' not in user or not user['characters']:
-        message = "Your harem is empty! Guess characters to add them."
+        message = "Your harem is empty! Buy characters from /shop or guess them."
         if update.message:
             await update.message.reply_text(message)
         else:
@@ -19,9 +18,8 @@ async def harem(update: Update, context: CallbackContext, page=0) -> None:
         return
 
     characters = user['characters']
-
     if isinstance(characters, list) and all(isinstance(char, str) for char in characters):
-        characters = [{'id': char} for char in characters]  
+        characters = [{'id': char, 'name': char, 'anime': 'Unknown', 'rarity': 'Common'} for char in characters]  
 
     unique_characters = {}
     character_counts = {}
