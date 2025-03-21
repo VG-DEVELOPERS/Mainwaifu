@@ -1,15 +1,15 @@
 import asyncio
 import random
 from datetime import datetime
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CommandHandler, MessageHandler, filters, CallbackContext
 from pymongo import MongoClient
 
 from Grabber import user_collection, collection, application
 
-SUPPORT_GROUP_ID = -1002528887253  # Replace with your support group ID
-OWNER_ID = 7717913705  # Replace with your actual group ID
-current_characters = {}  # Stores waifu per group
+SUPPORT_GROUP_ID = -1002528887253  
+OWNER_ID = 7717913705  
+current_characters = {}  
 
 async def add_coins(user_id: int, amount: int):
     if amount <= 0:
@@ -123,12 +123,12 @@ async def handle_guess(update: Update, context: CallbackContext):
     character = data["character"]
     character_name = character['name'].strip().lower()
 
-    if not data["guessed"] and guess == character_name:
+    if not data["guessed"] and character_name.startswith(guess):
         await add_coins(user_id, 20)
         await update.message.reply_text(f"🎉 Correct! You earned 20 coins!")
 
         del current_characters[chat_id]
-        await nguess(update, context)  # Auto-start next waifu
+        await nguess(update, context)
 
 async def send_timeout_message(context: CallbackContext):
     job_data = context.job.data
@@ -144,11 +144,14 @@ async def name(update: Update, context: CallbackContext):
         chat_id = update.effective_chat.id
         if chat_id in current_characters:
             character_name = current_characters[chat_id]["character"]["name"]
-            await update.message.reply_text(f"📜 Character Name: `{character_name}`")
+            copy_text = f"`{character_name}`"
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("📋 Copy Name", switch_inline_query=copy_text)]])
+
+            await update.message.reply_text(f"📜 Character Name: `{character_name}`", reply_markup=keyboard, parse_mode="Markdown")
         else:
-            await update.message.reply_text("⚠️ No active waifu to name!")
+            return  
     else:
-        await update.message.reply_text("Reply to an image to get the character's name.")
+        return  
 
 application.add_handler(CommandHandler("balance", balance))
 application.add_handler(CommandHandler("pay", pay))
@@ -157,3 +160,4 @@ application.add_handler(CommandHandler("mtop", mtop))
 application.add_handler(CommandHandler("nguess", nguess))
 application.add_handler(CommandHandler("name", name))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guess))
+    
