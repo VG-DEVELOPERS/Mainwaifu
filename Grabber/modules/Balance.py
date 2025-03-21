@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from pymongo import MongoClient
 
 from Grabber import user_collection, collection, application
-from config import OWNER_ID, SUPPORT_ID
+from Grabber import OWNER_ID, SUPPORT_ID
 
 # Global variables
 current_character = {}
