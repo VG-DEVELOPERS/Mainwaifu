@@ -1,96 +1,163 @@
-import random
-import math
 import html
+import random
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import CommandHandler, CallbackQueryHandler, CallbackContext
+from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler
 from Grabber import application, user_collection
 
-rarity_map = {
-    "⚪ Common": 1,
-    "🟠 Rare": 2,
-    "🟡 Legendary": 3,
-    "🟢 Medium": 4,
-    "💠 Cosmic": 5,
-    "💮 Exclusive": 6,
-    "🔮 Limited Edition": 7
-}
 
-async def harem(update: Update, context: CallbackContext, page=0) -> None:
+async def harem(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
-    user = await user_collection.find_one({'id': user_id})
+    username = update.effective_user.first_name  # Get actual username
+    user_data = await user_collection.find_one({"id": user_id})
 
-    if not user or 'characters' not in user or not user['characters']:
-        await update.message.reply_text("Your harem is empty! Buy characters from /shop or guess them.")
+    if not user_data or "characters" not in user_data or not user_data["characters"]:
+        await update.message.reply_text("Your harem is empty! Use /guess to collect waifus.")
         return
 
-    characters = user['characters']
+    characters = user_data["characters"]
+    favorite_character_id = user_data.get("fav_character")  # Get favorite character if exists
 
-    cleaned_characters = []
-    for char in characters:
-        if isinstance(char, str):
-            cleaned_characters.append({
-                "id": char, "name": char, "anime": "Unknown", "rarity": "⚪ Common", "imgurl": None
-            })
-        else:
-            cleaned_characters.append(char)
+    per_page = 5  
+    page = int(context.args[0]) if context.args and context.args[0].isdigit() else 0
+    total_pages = (len(characters) + per_page - 1) // per_page  
 
-    unique_characters = {}
-    character_counts = {}
+    rarity_map = {
+        "⚪": "Common",
+        "🟠": "Rare",
+        "🟡": "Legendary",
+        "🟢": "Medium",
+        "💠": "Cosmic",
+        "💮": "Exclusive",
+        "🔮": "Limited Edition",
+    }
 
-    for char in cleaned_characters:
-        char_id = char.get('id', str(random.randint(1000, 9999)))
-        unique_characters[char_id] = char
-        character_counts[char_id] = character_counts.get(char_id, 0) + 1
-
-    total_pages = math.ceil(len(unique_characters) / 5)
-    page = max(0, min(page, total_pages - 1))
-
-    username = html.escape(update.effective_user.first_name)
-    harem_message = f"{username}'s Recent Waifus - Page: {page+1}/{total_pages}\n"
-    
-    current_characters = list(unique_characters.values())[page * 5:(page + 1) * 5]
-
-    for char in current_characters:
-        name_emoji = "☘️"
-        anime_emoji = "⚜️"
-
-        name = char.get("name", "Unknown Name")
-        anime = char.get("anime", "Unknown Anime")
-        rarity = char.get("rarity", "⚪ Common")
-        count = character_counts.get(char["id"], 1)
-
-        anime_count = f"({random.randint(1, 60)}/{random.randint(5, 100)})"
-        rarity_value = rarity_map.get(rarity, 1)
-
-        harem_message += f"\n{name_emoji} Name: {name} (x{count})\n"
-        harem_message += f"{rarity} Rarity: {rarity_value}\n"
-        harem_message += f"{anime_emoji} Anime: {anime} {anime_count}\n"
-
-    total_count = len(user['characters'])
-    keyboard = [[InlineKeyboardButton(f"See Harem ({total_count})", switch_inline_query_current_chat=f"collection.{user_id}")]]
-    
-    if total_pages > 1:
-        nav_buttons = []
-        if page > 0:
-            nav_buttons.append(InlineKeyboardButton("⬅️", callback_data=f"harem:{page-1}:{user_id}"))
-        if page < total_pages - 1:
-            nav_buttons.append(InlineKeyboardButton("➡️", callback_data=f"harem:{page+1}:{user_id}"))
-        keyboard.append(nav_buttons)
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    fav_character_id = user.get('favorites', [None])[0]
-    fav_character = next((c for c in cleaned_characters if isinstance(c, dict) and c.get('id') == fav_character_id), None)
-    image_url = fav_character.get('imgurl') if fav_character else None
-
-    if not image_url and cleaned_characters:
-        random_character = random.choice(cleaned_characters)
-        image_url = random_character.get('imgurl')
-
-    if image_url:
-        await update.message.reply_photo(photo=image_url, caption=harem_message, parse_mode='HTML', reply_markup=reply_markup)
+    # Select favorite character or random one if none is set
+    if favorite_character_id:
+        fav_character = next((c for c in characters if c.get("id") == favorite_character_id), None)
     else:
-        await update.message.reply_text(harem_message, parse_mode='HTML', reply_markup=reply_markup)
+        fav_character = random.choice(characters) if characters else None
 
+    harem_message = f"{username}'s Recent Waifus - Page: {page+1}/{total_pages}\n\n"
+
+    # Show favorite character (or random one if no favorite)
+    if fav_character:
+        char_id = fav_character.get("id", "Unknown")
+        name = fav_character.get("name", "Unknown")
+        anime = fav_character.get("anime", "Unknown")
+        rarity = fav_character.get("rarity", "Unknown")
+        harem_message += (
+            f"⭐ **Favorite Character:**\n"
+            f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
+            f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
+            f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
+        )
+
+    # Display the current page of characters
+    characters_on_page = characters[page * per_page : (page + 1) * per_page]
+    for char in characters_on_page:
+        if char == fav_character:  # Skip if already displayed as favorite
+            continue
+
+        char_id = char.get("id", "Unknown")
+        name = char.get("name", "Unknown")
+        anime = char.get("anime", "Unknown")
+        rarity = char.get("rarity", "Unknown")
+
+        harem_message += (
+            f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
+            f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
+            f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
+        )
+
+    # Pagination buttons
+    buttons = []
+    if page > 0:
+        buttons.append(InlineKeyboardButton("⏮ Previous", callback_data=f"harem_{page-1}"))
+    if page + 1 < total_pages:
+        buttons.append(InlineKeyboardButton("⏭ Next", callback_data=f"harem_{page+1}"))
+
+    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
+
+    await update.message.reply_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
+
+
+async def harem_callback(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    user_id = query.from_user.id
+    username = query.from_user.first_name
+    user_data = await user_collection.find_one({"id": user_id})
+
+    if not user_data or "characters" not in user_data or not user_data["characters"]:
+        await query.answer("Your harem is empty!")
+        return
+
+    characters = user_data["characters"]
+    favorite_character_id = user_data.get("fav_character")
+    page = int(query.data.split("_")[1]) if query.data else 0
+    per_page = 5  
+    total_pages = (len(characters) + per_page - 1) // per_page  
+
+    rarity_map = {
+        "⚪": "Common",
+        "🟠": "Rare",
+        "🟡": "Legendary",
+        "🟢": "Medium",
+        "💠": "Cosmic",
+        "💮": "Exclusive",
+        "🔮": "Limited Edition",
+    }
+
+    # Select favorite character or random one
+    if favorite_character_id:
+        fav_character = next((c for c in characters if c.get("id") == favorite_character_id), None)
+    else:
+        fav_character = random.choice(characters) if characters else None
+
+    harem_message = f"{username}'s Recent Waifus - Page: {page+1}/{total_pages}\n\n"
+
+    if fav_character:
+        char_id = fav_character.get("id", "Unknown")
+        name = fav_character.get("name", "Unknown")
+        anime = fav_character.get("anime", "Unknown")
+        rarity = fav_character.get("rarity", "Unknown")
+        harem_message += (
+            f"⭐ **Favorite Character:**\n"
+            f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
+            f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
+            f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
+        )
+
+    # Display characters on the current page
+    characters_on_page = characters[page * per_page : (page + 1) * per_page]
+    for char in characters_on_page:
+        if char == fav_character:
+            continue
+
+        char_id = char.get("id", "Unknown")
+        name = char.get("name", "Unknown")
+        anime = char.get("anime", "Unknown")
+        rarity = char.get("rarity", "Unknown")
+
+        harem_message += (
+            f"☘️ Name: {name} (ID: 🎭 {char_id})\n"
+            f"{rarity} Rarity: {rarity_map.get(rarity, 'Unknown')}\n"
+            f"⚜️ Anime: {anime} (1/{len(characters)})\n\n"
+        )
+
+    # Pagination buttons
+    buttons = []
+    if page > 0:
+        buttons.append(InlineKeyboardButton("⏮ Previous", callback_data=f"harem_{page-1}"))
+    if page + 1 < total_pages:
+        buttons.append(InlineKeyboardButton("⏭ Next", callback_data=f"harem_{page+1}"))
+
+    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
+
+    await query.message.edit_text(harem_message, reply_markup=keyboard, parse_mode="Markdown")
+    await query.answer()
+
+
+# Register command and callback handler
 application.add_handler(CommandHandler("harem", harem, block=False))
-    
+application.add_handler(CallbackQueryHandler(harem_callback, pattern="^harem_"))
+        
