@@ -26,17 +26,15 @@ async def global_leaderboard(update: Update, context: CallbackContext) -> None:
     leaderboard_message = "<b>🏆 TOP 20 GROUPS WHO GUESSED MOST CHARACTERS 🏆</b>\n\n"
     for i, group in enumerate(leaderboard_data, start=1):
         group_name = html.escape(group.get('group_name', 'Unknown'))
-        if len(group_name) > 20:
+        if len(group_name) > 25:
             group_name = group_name[:25] + '...'
         leaderboard_message += f'{i}. <b>{group_name}</b> ➾ <b>{group["total_count"]}</b>\n'
 
     await update.message.reply_photo(
-        photo="https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg",
+        photo=PHOTO_URL,
         caption=leaderboard_message,
         parse_mode='HTML'
     )
-    
-
 
 async def ctop(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
@@ -53,7 +51,7 @@ async def ctop(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text("No data available for this group.")
         return
 
-    leaderboard_message = "<b>TOP 10 USERS WHO GUESSED CHARACTERS MOST IN THIS GROUP</b>\n\n"
+    leaderboard_message = "<b>TOP 10 USERS WHO GUESSED MOST CHARACTERS IN THIS GROUP</b>\n\n"
     for i, user in enumerate(leaderboard_data, start=1):
         username = user.get('username', 'Unknown')
         first_name = html.escape(str(user.get('first_name', 'Unknown') or 'Unknown'))
@@ -61,11 +59,10 @@ async def ctop(update: Update, context: CallbackContext) -> None:
         leaderboard_message += f'{i}. <a href="https://t.me/{username}"><b>{first_name}</b></a> ➾ <b>{character_count}</b>\n'
 
     await update.message.reply_photo(
-        photo="https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg",
+        photo=PHOTO_URL,
         caption=leaderboard_message,
         parse_mode='HTML'
     )
-
 
 async def leaderboard(update: Update, context: CallbackContext) -> None:
     cursor = user_collection.aggregate([
@@ -87,11 +84,10 @@ async def leaderboard(update: Update, context: CallbackContext) -> None:
         leaderboard_message += f'{i}. <a href="tg://user?id={user_id}"><b>{first_name}</b></a> ➾ <b>{character_count}</b>\n'
 
     await update.message.reply_photo(
-        photo="https://telegra.ph/file/1d9c963d5a138dc3c3077.jpg",
+        photo=PHOTO_URL,
         caption=leaderboard_message,
         parse_mode='HTML'
     )
-
 
 async def broadcast(update: Update, context: CallbackContext) -> None:
     if str(update.effective_user.id) != OWNER_ID:
@@ -105,8 +101,8 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
     all_users = await user_collection.find({}).to_list(length=None)
     all_groups = await group_user_totals_collection.find({}).to_list(length=None)
 
-    unique_user_ids = {user['id'] for user in all_users}
-    unique_group_ids = {group['group_id'] for group in all_groups}
+    unique_user_ids = {user.get('id') for user in all_users if user.get('id')}
+    unique_group_ids = {group.get('group_id') for group in all_groups if group.get('group_id')}
 
     total_sent = 0
     total_failed = 0
@@ -125,8 +121,7 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
         except Exception:
             total_failed += 1
 
-    await update.message.reply_text(f"Broadcast Report:\nTotal Sent: {total_sent}\nTotal Failed: {total_failed}")
-
+    await update.message.reply_text(f"📢 **Broadcast Report:**\n✅ Sent: {total_sent}\n❌ Failed: {total_failed}")
 
 async def stats(update: Update, context: CallbackContext) -> None:
     if str(update.effective_user.id) not in SUDO_USERS:
@@ -138,45 +133,14 @@ async def stats(update: Update, context: CallbackContext) -> None:
 
     await update.message.reply_text(f"Total Users: {user_count}\nTotal Groups: {group_count}")
 
-
-async def send_users_document(update: Update, context: CallbackContext) -> None:
-    if str(update.effective_user.id) not in SUDO_USERS:
-        await update.message.reply_text("Only for sudo users.")
-        return
-
-    users = await user_collection.find({}).to_list(length=None)
-    user_list = "\n".join(user['first_name'] for user in users if 'first_name' in user)
-
-    with open("users.txt", "w") as f:
-        f.write(user_list)
-
-    with open("users.txt", "rb") as f:
-        await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
-
-    os.remove("users.txt")
-
-
-async def send_groups_document(update: Update, context: CallbackContext) -> None:
-    if str(update.effective_user.id) not in SUDO_USERS:
-        await update.message.reply_text("Only for sudo users.")
-        return
-
-    groups = await top_global_groups_collection.find({}).to_list(length=None)
-    group_list = "\n".join(group['group_name'] for group in groups if 'group_name' in group)
-
-    with open("groups.txt", "w") as f:
-        f.write(group_list)
-
-    with open("groups.txt", "rb") as f:
-        await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
-
-    os.remove("groups.txt")
-
+async def shop(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    shop_url = f"https://yourshopwebsite.com/login?userid={user_id}"
+    await update.message.reply_text(f"🛍️ Access the shop here: [Click Here]({shop_url})", parse_mode="Markdown")
 
 application.add_handler(CommandHandler('ctop', ctop, block=False))
 application.add_handler(CommandHandler('stats', stats, block=False))
 application.add_handler(CommandHandler('TopGroups', global_leaderboard, block=False))
 application.add_handler(CommandHandler('broadcast', broadcast, block=False))
-application.add_handler(CommandHandler('list', send_users_document, block=False))
-application.add_handler(CommandHandler('groups', send_groups_document, block=False))
 application.add_handler(CommandHandler('top', leaderboard, block=False))
+application.add_handler(CommandHandler('shop', shop, block=False))
