@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CallbackContext, CommandHandler, MessageHandler, filters
 from Grabber import application, user_collection, collection
-from config import OWNER_ID, SUPPORT_ID  
+from Grabber import OWNER_ID, SUPPORT_ID  
 
 # Globals
 current_character = {}
