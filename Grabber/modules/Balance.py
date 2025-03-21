@@ -111,24 +111,47 @@ async def nguess(update: Update, context: CallbackContext):
 
     context.job_queue.run_once(send_timeout_message, when=300, data={"chat_id": chat_id, "character_name": character_name})
 
-async def handle_guess(update: Update, context: CallbackContext):
+
+
+async def handle_guess(update, context):
+    if not update.message or not update.message.text:
+        return
+
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     guess = update.message.text.strip().lower()
 
-    if chat_id not in current_characters:
-        return
+    if chat_id in current_character:
+        data = current_character[chat_id]
+        character = data["character"]
+        correct_name = character['name'].strip().lower()
 
-    data = current_characters[chat_id]
-    character = data["character"]
-    character_name = character['name'].strip().lower()
+        if not data["guessed"] and guess in correct_name:  # Allow partial name match
+            await add_coins(user_id, 20)
 
-    if not data["guessed"] and guess == character_name:
-        await add_coins(user_id, 20)
-        await update.message.reply_text(f"🎉 Correct! You earned 20 coins!")
+            if chat_id not in streaks:
+                streaks[chat_id] = {"streak": 1, "misses": 0}
+            else:
+                streaks[chat_id]["streak"] += 1
+                streaks[chat_id]["misses"] = 0  
 
-        del current_characters[chat_id]
-        await nguess(update, context)  # Auto-start next waifu
+            streak = streaks[chat_id]["streak"]
+
+            await update.message.reply_text(f"🎉 Correct! You've earned 20 coins! Your streak is {streak}! 🎉")
+            data["guessed"] = True  
+
+            if "timeout" in data and not data["timeout"].done():
+                data["timeout"].cancel()
+
+            reward_map = {30: 1000, 50: 1500, 100: 2000}
+            if streak in reward_map:
+                await add_coins(user_id, reward_map[streak])
+                await update.message.reply_text(f"🎉 {streak}-streak! Earned {reward_map[streak]} coins! 🎉")
+
+                if streak == 100:
+                    streaks[chat_id]["streak"] = 0  
+
+            del current_character[chat_id]
 
 async def send_timeout_message(context: CallbackContext):
     job_data = context.job.data
@@ -139,20 +162,30 @@ async def send_timeout_message(context: CallbackContext):
         await context.bot.send_message(chat_id, f"⏳ Time's up! The correct answer was **{character_name}**.")
         del current_characters[chat_id]
 
-async def name(update: Update, context: CallbackContext):
-    if update.message.reply_to_message and update.message.reply_to_message.photo:
-        chat_id = update.effective_chat.id
-        if chat_id in current_characters:
-            character_name = current_characters[chat_id]["character"]["name"]
-            await update.message.reply_text(f"📜 Character Name: `{character_name}`")
-        else:
-            await update.message.reply_text("⚠️ No active waifu to name!")
-    else:
-        await update.message.reply_text("Reply to an image to get the character's name.")
+async def name(update, context):
+    if not update.message or not update.message.reply_to_message or not update.message.reply_to_message.photo:
+        await update.message.reply_text("Please reply to a waifu image to get the character name.")
+        return
 
+    chat_id = update.effective_chat.id
+
+    if chat_id in current_character:
+        character = current_character[chat_id]["character"]
+        character_name = character['name']
+
+        copy_string = f"None {character_name}"
+
+        await update.message.reply_text(
+            f"**Character Name:** {character_name}\n\n"
+            f"**Copy String:** `{copy_string}`",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text("No active waifu guess found!")
+        
 application.add_handler(CommandHandler("balance", balance))
 application.add_handler(CommandHandler("pay", pay))
-application.add_handler(CommandHandler("dailyreward", daily_reward))
+application.add_handler(CommandHandler("daily", daily_reward))
 application.add_handler(CommandHandler("mtop", mtop))
 application.add_handler(CommandHandler("nguess", nguess))
 application.add_handler(CommandHandler("name", name))
