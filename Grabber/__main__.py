@@ -8,34 +8,47 @@ from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
-from Grabber import (collection, user_collection, user_totals_collection, Grabberu)
-from Grabber import application, LOGGER
+from Grabber import (
+    collection, top_global_groups_collection, group_user_totals_collection,
+    user_collection, user_totals_collection, Grabberu, application, 
+    SUPPORT_CHAT, UPDATE_CHAT, db, LOGGER
+)
+from Grabber.modules import ALL_MODULES
 
 locks = {}
 message_counts = {}
 last_characters = {}
 sent_characters = {}
 first_correct_guesses = {}
-last_grab = {}
-waifu_message = {}
 last_user = {}
 warned_users = {}
+waifu_message = {}
+
+for module_name in ALL_MODULES:
+    importlib.import_module("Grabber.modules." + module_name)
 
 rarity_map = {
-    "⚪ Common": 5,
-    "🟢 Medium": 3,
-    "🟠 Rare": 2,
-    "🟡 Legendary": 1
+    1: "⚪ Common",
+    2: "🟢 Medium",
+    3: "🟠 Rare",
+    4: "🟡 Legendary",
+    5: "💠 Cosmic",
+    6: "💮 Exclusive",
+    7: "🔮 Limited Edition"
 }
+
+rarity_spawn_counts = [
+    ("⚪ Common", 5),
+    ("🟢 Medium", 3),
+    ("🟠 Rare", 2),
+    ("🟡 Legendary", 1)
+]
 
 special_rarity_thresholds = {
     "💠 Cosmic": 5000,
     "💮 Exclusive": 10000,
     "🔮 Limited Edition": 15000
 }
-
-for module_name in importlib.import_module("Grabber.modules").ALL_MODULES:
-    importlib.import_module(f"Grabber.modules.{module_name}")
 
 def escape_markdown(text):
     escape_chars = r'\*_`\\~>#+-=|{}.!'
@@ -47,8 +60,11 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
 
     if chat_id not in locks:
         locks[chat_id] = asyncio.Lock()
-    
+
     async with locks[chat_id]:
+        if chat_id not in message_counts:
+            message_counts[chat_id] = 0  
+
         chat_frequency = await user_totals_collection.find_one({'chat_id': chat_id})
         message_frequency = chat_frequency.get('message_frequency', 100) if chat_frequency else 100
 
@@ -63,14 +79,18 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
         else:
             last_user[chat_id] = {'user_id': user_id, 'count': 1}
 
-        message_counts[chat_id] = message_counts.get(chat_id, 0) + 1
+        message_counts[chat_id] += 1
 
         if message_counts[chat_id] % message_frequency == 0:
             await send_image(update, context)
-            message_counts[chat_id] = 0
+            message_counts[chat_id] = 0  
 
 async def send_image(update: Update, context: CallbackContext) -> None:
-    chat_id = update.effective_chat.id
+    chat_id = str(update.effective_chat.id)
+    
+    if chat_id not in message_counts:  
+        message_counts[chat_id] = 0  
+
     all_characters = list(await collection.find({}).to_list(length=None))
 
     if chat_id not in sent_characters:
@@ -86,7 +106,7 @@ async def send_image(update: Update, context: CallbackContext) -> None:
                 character = random.choice(available_characters)
                 break
     else:
-        rarity_cycle = sum(([rarity] * count for rarity, count in rarity_map.items()), [])
+        rarity_cycle = [rarity for rarity, count in rarity_spawn_counts for _ in range(count)]
         required_rarity = rarity_cycle[message_counts[chat_id] % len(rarity_cycle)]
 
         available_characters = [c for c in all_characters if c['rarity'] == required_rarity] or all_characters
@@ -106,71 +126,45 @@ async def send_image(update: Update, context: CallbackContext) -> None:
     )
 
 async def guess(update: Update, context: CallbackContext) -> None:
-    chat_id = update.effective_chat.id
+    chat_id = str(update.effective_chat.id)
     user_id = update.effective_user.id
+    user_guess = " ".join(context.args).strip().lower()
 
     if chat_id not in last_characters:
+        await update.message.reply_text("No character is available to guess right now!")
         return
 
-    if chat_id in first_correct_guesses:
-        last_grabber_id = first_correct_guesses[chat_id]
-        last_grabber_user = await user_collection.find_one({'id': last_grabber_id})
-        last_grabber_name = last_grabber_user['first_name'] if last_grabber_user else 'Unknown User'
-        await update.message.reply_text(
-            f'⚠ Waifu already grabbed by <a href="tg://openmessage?user_id={last_grabber_id}">{escape(last_grabber_name)}</a>.\nℹ Wait for a new waifu to appear.',
-            parse_mode='HTML'
-        )
-        return
+    character = last_characters[chat_id]
+    correct_name = character["name"].lower()
 
-    guess = ' '.join(context.args).lower() if context.args else ''
-    
-    if "()" in guess or "&" in guess.lower():
-        await update.message.reply_text("Nahh You Can't use This Types of words in your guess..❌️")
-        return
-
-    name_parts = last_characters[chat_id]['name'].lower().split()
-    
-    if sorted(name_parts) == sorted(guess.split()) or any(part == guess for part in name_parts):
-        first_correct_guesses[chat_id] = user_id
-        last_grab[chat_id] = user_id
-
-        await user_collection.update_one({'id': user_id}, {'$push': {'characters': last_characters[chat_id]}}, upsert=True)
-
-        keyboard = [[InlineKeyboardButton(f"See Harem", switch_inline_query_current_chat=f"collection.{user_id}")]]
-        await update.message.reply_text(
-            f'<b><a href="tg://user?id={user_id}">{escape(update.effective_user.first_name)}</a></b> You Guessed a New Character ✅️ \n\n𝗡𝗔𝗠𝗘: <b>{last_characters[chat_id]["name"]}</b> \n𝗔𝗡𝗜𝗠𝗘: <b>{last_characters[chat_id]["anime"]}</b> \n𝗥𝗔𝗥𝗜𝗧𝗬: <b>{last_characters[chat_id]["rarity"]}</b>\n\nThis Character added to your harem. Use /harem to see your harem.',
-            parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    if user_guess == correct_name:
+        if chat_id not in first_correct_guesses:
+            first_correct_guesses[chat_id] = user_id
+            await update.message.reply_text(f"🎉 {update.effective_user.first_name} guessed the character correctly! 🎊")
+        else:
+            await update.message.reply_text("Someone has already guessed this character!")
     else:
-        await update.message.reply_text('Please Write Correct Character Name... ❌️')
+        await update.message.reply_text("❌ Incorrect guess. Try again!")
 
 async def fav(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
+    favorites = await user_collection.find_one({"user_id": user_id}, {"favorites": 1})
 
-    if not context.args:
-        await update.message.reply_text('Please provide Character id...')
+    if not favorites or "favorites" not in favorites:
+        await update.message.reply_text("You have no favorite characters yet.")
         return
 
-    character_id = context.args[0]
-
-    user = await user_collection.find_one({'id': user_id})
-    if not user:
-        await update.message.reply_text('You have not Guessed any characters yet....')
-        return
-
-    await user_collection.update_one({'id': user_id}, {'$set': {'favorites': [character_id]}})
-
-    await update.message.reply_text(f'Character has been added to your favorite...')
+    favorite_list = "\n".join([f"⭐ {fav}" for fav in favorites["favorites"]])
+    await update.message.reply_text(f"Your Favorite Characters:\n{favorite_list}")
 
 def main() -> None:
-    application.add_handler(CommandHandler(["guess", "collect", "grab", "hunt"], guess, block=False))
+    application.add_handler(CommandHandler(["guess", "seal", "collect", "grab", "hunt"], guess, block=False))
     application.add_handler(CommandHandler("fav", fav, block=False))
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
 
     application.run_polling(drop_pending_updates=True)
-
+    
 if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
     main()
-  
