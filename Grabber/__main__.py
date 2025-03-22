@@ -19,6 +19,7 @@ last_characters = {}
 sent_characters = {}
 first_correct_guesses = {}
 last_grab = {}
+user_favorites = {}  # New dictionary to store user favorites
 waifu_message = {}
 
 for module_name in ALL_MODULES:
@@ -158,6 +159,22 @@ async def guess(update: Update, context: CallbackContext) -> None:
         )
     else:
         await update.message.reply_text('❌ Incorrect guess. Try again!')
+
+async def fav(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+
+    if user_id not in last_grab.values():
+        await update.message.reply_text("❌ You haven't grabbed a waifu yet. Use /guess first!")
+        return
+
+    waifu = last_characters.get(update.effective_chat.id)
+
+    if not waifu:
+        await update.message.reply_text("❌ No waifu available to favorite!")
+        return
+
+    user_favorites[user_id] = waifu
+    await update.message.reply_text(f"🌟 {waifu['name']} has been added to your favorites!")
 
 def main() -> None:
     """Run bot."""
