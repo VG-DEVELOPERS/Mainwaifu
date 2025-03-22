@@ -11,7 +11,7 @@ from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filter
 from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
                    user_collection, user_totals_collection, Grabberu)
 from Grabber import application, SUPPORT_CHAT, UPDATE_CHAT, db, LOGGER
-from shivu.modules import ALL_MODULES
+from Grabber.modules import ALL_MODULES
 
 locks = {}
 message_counts = {}
@@ -133,7 +133,7 @@ def main() -> None:
     application.run_polling(drop_pending_updates=True)
     
 if __name__ == "__main__":
-    shivuu.start()
+    Grabberu.start()
     LOGGER.info("Bot started")
     main()
     
