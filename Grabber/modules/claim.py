@@ -9,8 +9,8 @@ from Grabber import Grabberu as app
 # Required groups
 MUST_JOIN = "seal_Your_WH_Group"
 SECOND_JOIN = "SEAL_UPDATE"
+BOT_USERNAME = "Seal_Your_Waifu_Bot"  # Replace with your bot's username
 
-# Rarity probabilities
 RARITY_WEIGHTS = {
     '⚪ Common': 60,
     '🟢 Medium': 30,
@@ -40,12 +40,26 @@ async def has_joined_required_groups(user_id):
     except UserNotParticipant:
         return False
 
+async def has_started_bot(user_id):
+    """Check if the user has started the bot in PM."""
+    user_data = await user_collection.find_one({'id': user_id})
+    return user_data is not None  # If user exists in DB, they have started the bot
+
 @app.on_message(filters.command("claim") & filters.group)
 async def claim_waifu(client: Client, message: Message):
-    """Allows users to claim a waifu but only once."""
+    """Allows users to claim a waifu only if they have started the bot and joined groups."""
     user_id = message.from_user.id
     first_name = html.escape(message.from_user.first_name)  
     mention = f"[{first_name}](tg://user?id={user_id})"
+
+    # Check if user has started the bot in PM
+    if not await has_started_bot(user_id):
+        return await message.reply_text(
+            "🔹 **You need to start the bot in private chat first!**",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("▶️ Start Bot", url=f"https://t.me/{BOT_USERNAME}?start=start")]
+            ])
+        )
 
     # Check if user exists in the database; if not, insert them
     user_data = await user_collection.find_one({'id': user_id})
@@ -66,27 +80,27 @@ async def claim_waifu(client: Client, message: Message):
     if user_data.get('claimed_waifu', False):
         return await message.reply_text("🎖️ **You have already claimed your waifu! You cannot claim again.**")
 
-    # Check if the user has already been verified as a group member
-    if not user_data.get('joined_required_groups', False):
-        if not await has_joined_required_groups(user_id):
-            return await message.reply_text(
-                "🔒 To claim a waifu, you must join both groups!",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Join Group", url=f"https://t.me/{MUST_JOIN}")],
-                    [InlineKeyboardButton("Join Channel", url=f"https://t.me/{SECOND_JOIN}")]
-                ])
-            )
+    # Check if the user has joined the required groups
+    if not await has_joined_required_groups(user_id):
+        return await message.reply_text(
+            "🔒 **To claim a waifu, you must join both groups!**",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Join Group", url=f"https://t.me/{MUST_JOIN}")],
+                [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{SECOND_JOIN}")],
+                [InlineKeyboardButton("🔄 Check Again", callback_data=f"check_join_{user_id}")]
+            ])
+        )
 
-        # Save that user has joined the required groups
-        await user_collection.update_one({'id': user_id}, {'$set': {'joined_required_groups': True}})
-        print(f"✅ User {user_id} marked as joined_required_groups")
+    # Save that user has joined the required groups
+    await user_collection.update_one({'id': user_id}, {'$set': {'joined_required_groups': True}})
+    print(f"✅ User {user_id} marked as joined_required_groups")
 
     # Get a random waifu
     waifu = await get_random_waifu()
     if not waifu:
         return await message.reply_text("⚠️ No waifus available at the moment. Try again later!")
 
-    # Format waifu data to match `harem` structure
+    # Format waifu data
     waifu_data = {
         'id': waifu['id'],
         'name': waifu['name'],
@@ -100,12 +114,9 @@ async def claim_waifu(client: Client, message: Message):
     await user_collection.update_one(
         {'id': user_id},
         {
-            '$set': {
-                'claimed_waifu': True,  # Mark as claimed forever
-                'first_name': first_name
-            },
-            '$push': {'characters': waifu_data},  # Add waifu to character list
-            '$inc': {'waifu_count': 1}  # Increase waifu count
+            '$set': {'claimed_waifu': True, 'first_name': first_name},
+            '$push': {'characters': waifu_data},  
+            '$inc': {'waifu_count': 1}  
         }
     )
 
@@ -128,8 +139,21 @@ async def claim_waifu(client: Client, message: Message):
             elif media_url.endswith(('.mp4', '.mov', '.avi', '.webm')):  
                 await message.reply_video(video=media_url, caption=caption)
         else:
-            await message.reply_text(caption)  
+            await message.reply_text(caption)
     except Exception as e:
         print(f"Failed to send media: {e}")
         await message.reply_text(caption)
+
+@app.on_callback_query(filters.regex(r"check_join_(\d+)"))
+async def check_join(client: Client, callback_query):
+    """Rechecks if the user has joined the required groups."""
+    user_id = int(callback_query.matches[0].group(1))
+
+    if callback_query.from_user.id != user_id:
+        return await callback_query.answer("⚠️ This is not for you!", show_alert=True)
+
+    if await has_joined_required_groups(user_id):
+        await callback_query.message.edit_text("✅ **You have successfully joined the required groups! Now use /claim to get your waifu.**")
+    else:
+        await callback_query.answer("❌ You still haven't joined both groups!", show_alert=True)
         
