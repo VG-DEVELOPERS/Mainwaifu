@@ -1,6 +1,6 @@
 from pyrogram import Client, filters
 import asyncio
-from Grabberu import shivuu, user_collection, group_user_totals_collection, db
+from Grabber import Grabberu as shivuu, user_collection, group_user_totals_collection, db
 
 characters_collection = db['anime_characters_lol']
 
