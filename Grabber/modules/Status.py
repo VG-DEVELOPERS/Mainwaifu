@@ -2,7 +2,6 @@ from pyrogram import Client, filters
 import asyncio
 from Grabber import Grabberu as Grabber, user_collection, group_user_totals_collection, db
 
-# MongoDB Collections
 characters_collection = db['anime_characters_lol']
 
 RARITIES = [
@@ -14,18 +13,20 @@ async def get_user_rarity_counts(user_id):
     rarity_counts = {rarity: 0 for rarity in RARITIES}
     user = await user_collection.find_one({'id': user_id})
 
-    if isinstance(user, dict):
-        for char in user.get('characters', []):
-            rarity = char.get('rarity', '⚪ Common')  # Default to Common
+    if user and isinstance(user, dict) and 'characters' in user:
+        for char in user['characters']:
+            rarity = char.get('rarity', '⚪ Common')
             if rarity in rarity_counts:
                 rarity_counts[rarity] += 1
 
     return rarity_counts
 
 async def get_progress_bar(user_count, total_count):
+    if total_count == 0:
+        return "▱▱▱▱▱▱▱▱▱▱", 0.00
     bar_width = 10
-    progress = min(user_count / total_count, 1)
-    progress_percent = min(progress * 100, 100)
+    progress = user_count / total_count
+    progress_percent = round(progress * 100, 2)
     filled_width = int(progress * bar_width)
     empty_width = bar_width - filled_width
     progress_bar = "▰" * filled_width + "▱" * empty_width
@@ -51,9 +52,7 @@ def get_rank(progress_percent):
 
 async def get_chat_top(chat_id, user_id):
     try:
-        pipeline = [{"$match": {"group_id": chat_id}}, {"$sort": {"count": -1}}, {"$limit": 10}]
-        leaderboard = await group_user_totals_collection.aggregate(pipeline).to_list(length=None)
-
+        leaderboard = await group_user_totals_collection.find({"group_id": chat_id}).sort("count", -1).to_list(10)
         for i, user in enumerate(leaderboard, start=1):
             if user.get('user_id') == user_id:
                 return i
@@ -64,12 +63,10 @@ async def get_chat_top(chat_id, user_id):
 
 async def get_global_top(user_id):
     try:
-        pipeline = [
+        leaderboard = await user_collection.aggregate([
             {"$project": {"id": 1, "characters_count": {"$size": {"$ifNull": ["$characters", []]}}}},
             {"$sort": {"characters_count": -1}}
-        ]
-        leaderboard = await user_collection.aggregate(pipeline).to_list(length=None)
-
+        ]).to_list(10)
         for i, user in enumerate(leaderboard, start=1):
             if user.get('id') == user_id:
                 return i
@@ -89,13 +86,7 @@ async def send_grabber_status(client, message):
         user_id = message.from_user.id
         user = await user_collection.find_one({'id': user_id})
 
-        if isinstance(user, dict):
-            total_count = len(user.get('characters', []))
-            profile_image_url = user.get('profile_image_url', None)
-        else:
-            total_count = 0
-            profile_image_url = None
-
+        total_count = len(user.get('characters', [])) if user else 0
         total_waifus_count = await user_collection.count_documents({})
         chat_top = await get_chat_top(message.chat.id, user_id)
         global_top = await get_global_top(user_id)
@@ -120,7 +111,7 @@ async def send_grabber_status(client, message):
             f"➣ ❄️ Name: {message.from_user.first_name} {message.from_user.last_name or ''}\n"
             f"➣ 🍀 User ID: {user_id}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"➣ 👾 Harem: {total_count}/{total_waifus_count} ({(total_count / total_waifus_count) * 100:.3f}%)\n"
+            f"➣ 👾 Harem: {total_count}/{total_waifus_count} ({progress_percent:.3f}%)\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"{rarity_display}"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -132,8 +123,8 @@ async def send_grabber_status(client, message):
             f"╚════════ • ✧ • ════════╝"
         )
 
-        if profile_image_url:
-            await message.reply_photo(photo=profile_image_url, caption=status_message)
+        if user and 'profile_image_url' in user and user['profile_image_url']:
+            await message.reply_photo(photo=user['profile_image_url'], caption=status_message)
         else:
             await message.reply_text(status_message)
 
