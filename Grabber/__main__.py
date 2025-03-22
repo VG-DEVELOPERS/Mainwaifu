@@ -124,6 +124,41 @@ async def send_image(update: Update, context: CallbackContext) -> None:
         parse_mode='Markdown'
     )
 
+async def guess(update: Update, context: CallbackContext) -> None:
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+
+    if chat_id not in last_characters:
+        return
+
+    if chat_id in first_correct_guesses:
+        last_grabber_id = first_correct_guesses[chat_id]
+        last_grabber_user = await user_collection.find_one({'id': last_grabber_id})
+        last_grabber_name = last_grabber_user['first_name'] if last_grabber_user else 'Unknown User'
+        await update.message.reply_text(
+            f'⚠ Waifu already grabbed by <a href="tg://openmessage?user_id={last_grabber_id}">{escape(last_grabber_name)}</a>.\nℹ Wait for a new waifu to appear.',
+            parse_mode='HTML'
+        )
+        return
+
+    guess = ' '.join(context.args).lower() if context.args else ''
+    
+    if "()" in guess or "&" in guess.lower():
+        await update.message.reply_text("Nahh You Can't use This Types of words in your guess..❌️")
+        return
+
+    name_parts = last_characters[chat_id]['name'].lower().split()
+    
+    if sorted(name_parts) == sorted(guess.split()) or any(part == guess for part in name_parts):
+        first_correct_guesses[chat_id] = user_id
+        last_grab[chat_id] = user_id
+
+        await update.message.reply_text(
+            f'🎉 {update.effective_user.first_name} guessed correctly! {last_characters[chat_id]["name"]} is now in your harem.'
+        )
+    else:
+        await update.message.reply_text('❌ Incorrect guess. Try again!')
+
 def main() -> None:
     """Run bot."""
     application.add_handler(CommandHandler(["guess", "seal", "collect", "grab", "hunt"], guess, block=False))
@@ -136,4 +171,4 @@ if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
     main()
-    
+  
