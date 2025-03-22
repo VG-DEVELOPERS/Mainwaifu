@@ -8,10 +8,8 @@ from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
-from Grabber import (collection, top_global_groups_collection, group_user_totals_collection,
-                     user_collection, user_totals_collection, Grabberu)
-from Grabber import application, SUPPORT_CHAT, UPDATE_CHAT, db, LOGGER
-from Grabber.modules import ALL_MODULES
+from Grabber import (collection, user_collection, user_totals_collection, Grabberu)
+from Grabber import application, LOGGER
 
 locks = {}
 message_counts = {}
@@ -24,21 +22,11 @@ last_user = {}
 warned_users = {}
 
 rarity_map = {
-    1: "⚪ Common",
-    2: "🟢 Medium",
-    3: "🟠 Rare",
-    4: "🟡 Legendary",
-    5: "💠 Cosmic",
-    6: "💮 Exclusive",
-    7: "🔮 Limited Edition"
+    "⚪ Common": 5,
+    "🟢 Medium": 3,
+    "🟠 Rare": 2,
+    "🟡 Legendary": 1
 }
-
-rarity_spawn_counts = [
-    ("⚪ Common", 5),
-    ("🟢 Medium", 3),
-    ("🟠 Rare", 2),
-    ("🟡 Legendary", 1)
-]
 
 special_rarity_thresholds = {
     "💠 Cosmic": 5000,
@@ -46,8 +34,8 @@ special_rarity_thresholds = {
     "🔮 Limited Edition": 15000
 }
 
-for module_name in ALL_MODULES:
-    importlib.import_module("Grabber.modules." + module_name)
+for module_name in importlib.import_module("Grabber.modules").ALL_MODULES:
+    importlib.import_module(f"Grabber.modules.{module_name}")
 
 def escape_markdown(text):
     escape_chars = r'\*_`\\~>#+-=|{}.!'
@@ -59,9 +47,8 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
 
     if chat_id not in locks:
         locks[chat_id] = asyncio.Lock()
-    lock = locks[chat_id]
-
-    async with lock:
+    
+    async with locks[chat_id]:
         chat_frequency = await user_totals_collection.find_one({'chat_id': chat_id})
         message_frequency = chat_frequency.get('message_frequency', 100) if chat_frequency else 100
 
@@ -70,9 +57,7 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
             if last_user[chat_id]['count'] >= 10:
                 if user_id in warned_users and time.time() - warned_users[user_id] < 600:
                     return
-                await update.message.reply_text(
-                    f"⚠️ Don't Spam {update.effective_user.first_name}...\nYour Messages Will be ignored for 10 Minutes..."
-                )
+                await update.message.reply_text(f"⚠️ Don't Spam {update.effective_user.first_name}...\nYour Messages Will be ignored for 10 Minutes...")
                 warned_users[user_id] = time.time()
                 return
         else:
@@ -86,8 +71,6 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
 
 async def send_image(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
-    message_counts[chat_id] = message_counts.get(chat_id, 0)
-
     all_characters = list(await collection.find({}).to_list(length=None))
 
     if chat_id not in sent_characters:
@@ -103,9 +86,8 @@ async def send_image(update: Update, context: CallbackContext) -> None:
                 character = random.choice(available_characters)
                 break
     else:
-        rarity_cycle = [rarity for rarity, count in rarity_spawn_counts for _ in range(count)]
-        current_rarity_index = message_counts[chat_id] % len(rarity_cycle)
-        required_rarity = rarity_cycle[current_rarity_index]
+        rarity_cycle = sum(([rarity] * count for rarity, count in rarity_map.items()), [])
+        required_rarity = rarity_cycle[message_counts[chat_id] % len(rarity_cycle)]
 
         available_characters = [c for c in all_characters if c['rarity'] == required_rarity] or all_characters
         character = random.choice(available_characters)
@@ -119,7 +101,7 @@ async def send_image(update: Update, context: CallbackContext) -> None:
     waifu_message[chat_id] = await context.bot.send_photo(
         chat_id=chat_id,
         photo=character['img_url'],
-        caption=f"""A New {character['rarity']} Character Appeared...\n/guess Character Name and add in Your Harem""",
+        caption=f"A New {character['rarity']} Character Appeared...\n/guess Character Name and add in Your Harem",
         parse_mode='Markdown'
     )
 
@@ -191,4 +173,4 @@ if __name__ == "__main__":
     Grabberu.start()
     LOGGER.info("Bot started")
     main()
-      
+  
